@@ -1,0 +1,43 @@
+{
+  "lexicon": 1,
+  "id": "network.hivemind.mobility.ride",
+  "description": "Task type for passenger rides from a pickup to a dropoff point. Served by robotaxis in the demo, but not limited to them. The routing point is the pickup.",
+  "defs": {
+    "request": {
+      "type": "object",
+      "description": "What the rider asks for. Payload of requester.request, coordinator.dispatch (coarsened) and coordinator.assignment (exact).",
+      "required": ["pickup", "dropoff", "passengers"],
+      "properties": {
+        "pickup": { "type": "ref", "ref": "network.hivemind.defs#geoPoint" },
+        "dropoff": { "type": "ref", "ref": "network.hivemind.defs#geoPoint" },
+        "passengers": { "type": "integer", "minimum": 1 }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "description": "What a vehicle offers. Payload of agent.offer, and the terms in coordinator.taskState options and coordinator.assignment. Ranking features: pickupEtaSeconds, price, tripDurationSeconds (all lower is better).",
+      "required": ["pickupEtaSeconds", "tripDurationSeconds", "tripDistanceMeters", "price", "vehicle"],
+      "properties": {
+        "pickupEtaSeconds": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Seconds from the offer's createdAt until the vehicle reaches the pickup."
+        },
+        "tripDurationSeconds": { "type": "integer", "minimum": 0 },
+        "tripDistanceMeters": { "type": "integer", "minimum": 0 },
+        "price": { "type": "ref", "ref": "network.hivemind.defs#money" },
+        "vehicle": { "type": "ref", "ref": "#vehicle" }
+      }
+    },
+    "vehicle": {
+      "type": "object",
+      "description": "Lets the rider recognise the car.",
+      "required": ["model", "seats"],
+      "properties": {
+        "model": { "type": "string", "maxLength": 640, "maxGraphemes": 64 },
+        "plate": { "type": "string", "maxLength": 32 },
+        "seats": { "type": "integer", "minimum": 1 }
+      }
+    }
+  }
+}

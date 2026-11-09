@@ -1,0 +1,72 @@
+{
+  "lexicon": 1,
+  "id": "network.hivemind.coordinator.taskState",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "The requester's live view of a task, kept current by the coordinator in the task space.",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": ["phase", "updatedAt"],
+        "properties": {
+          "phase": {
+            "type": "string",
+            "knownValues": [
+              "collecting",
+              "awaitingSelection",
+              "assigned",
+              "completed",
+              "cancelled",
+              "failed",
+              "noCoverage",
+              "noOffers",
+              "expired"
+            ],
+            "maxLength": 64
+          },
+          "respondBy": { "type": "string", "format": "datetime" },
+          "options": {
+            "type": "array",
+            "items": { "type": "ref", "ref": "#offerOption" },
+            "maxLength": 50,
+            "description": "Ranked offers, best first. Emptied once the task is assigned, because the winning agent can read this record from then on."
+          },
+          "selectBy": {
+            "type": "string",
+            "format": "datetime",
+            "description": "In choose mode, the deadline for the requester's selection."
+          },
+          "assignedAgent": { "type": "string", "format": "did" },
+          "updatedAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    },
+    "offerOption": {
+      "type": "object",
+      "description": "One ranked offer as the requester sees it.",
+      "required": ["optionId", "agent", "score", "terms"],
+      "properties": {
+        "optionId": { "type": "string", "maxLength": 64 },
+        "agent": { "type": "string", "format": "did" },
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Ranking score, higher is better."
+        },
+        "headline": {
+          "type": "string",
+          "maxLength": 1000,
+          "maxGraphemes": 100,
+          "description": "One-line summary, e.g. pickup time and price."
+        },
+        "terms": {
+          "type": "union",
+          "refs": [],
+          "description": "The offer's payload, e.g. network.hivemind.mobility.ride#offer."
+        }
+      }
+    }
+  }
+}

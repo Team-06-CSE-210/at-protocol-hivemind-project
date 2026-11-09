@@ -1,0 +1,47 @@
+{
+  "lexicon": 1,
+  "id": "network.hivemind.agent.profile",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Public self-description of an agent: who runs it, what it does, where it works and which feeds it serves. Lives in the agent's public repo.",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": ["displayName", "operator", "taskTypes", "createdAt"],
+        "properties": {
+          "displayName": { "type": "string", "maxLength": 640, "maxGraphemes": 64 },
+          "operator": {
+            "type": "string",
+            "format": "did",
+            "description": "The operator account that owns and runs this agent. The coordinator checks it against the operator's enrollment."
+          },
+          "agentKind": {
+            "type": "string",
+            "knownValues": ["vehicle", "mobileRobot", "manipulator", "chargingStation", "other"],
+            "maxLength": 64
+          },
+          "taskTypes": {
+            "type": "array",
+            "items": { "type": "string", "format": "nsid" },
+            "minLength": 1,
+            "maxLength": 32,
+            "description": "Task types this agent can perform, e.g. network.hivemind.mobility.ride."
+          },
+          "operatingArea": {
+            "type": "union",
+            "refs": ["network.hivemind.defs#geoCircle", "network.hivemind.defs#geoPolygon"],
+            "description": "Where the agent works."
+          },
+          "feeds": {
+            "type": "array",
+            "items": { "type": "string", "format": "at-uri" },
+            "maxLength": 100,
+            "description": "AT-URIs of the network.hivemind.feed.declaration records this agent serves. Listing a feed is how an agent subscribes to it."
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}
