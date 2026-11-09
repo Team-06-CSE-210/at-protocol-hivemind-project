@@ -1,0 +1,58 @@
+{
+  "lexicon": 1,
+  "id": "internal.hivemind.coordinator.defs",
+  "description": "Coordinator-only types for ranking offers. They never leave Hivemind's own infrastructure: the internal. prefix is atproto's convention for that, and @atproto/lex keeps such lexicons out of published SDKs. Used between the coordinator, its task type modules and the matching engine.",
+  "defs": {
+    "scoringCriterion": {
+      "type": "object",
+      "description": "One feature the ranking uses, with its weight and direction.",
+      "required": ["feature", "weightPercent", "better"],
+      "properties": {
+        "feature": {
+          "type": "string",
+          "maxLength": 64,
+          "description": "Feature name defined by the task type, e.g. pickupEtaSeconds."
+        },
+        "weightPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
+        "better": { "type": "string", "enum": ["lower", "higher"] }
+      }
+    },
+    "featureValue": {
+      "type": "object",
+      "required": ["feature", "value"],
+      "properties": {
+        "feature": { "type": "string", "maxLength": 64 },
+        "value": {
+          "type": "integer",
+          "description": "In the feature's own unit (seconds, meters, minor currency units)."
+        }
+      }
+    },
+    "rankCandidate": {
+      "type": "object",
+      "description": "One accepted offer, reduced to the values the ranking needs.",
+      "required": ["optionId", "values"],
+      "properties": {
+        "optionId": { "type": "string", "maxLength": 64 },
+        "values": {
+          "type": "array",
+          "items": { "type": "ref", "ref": "#featureValue" },
+          "maxLength": 32
+        }
+      }
+    },
+    "rankedOption": {
+      "type": "object",
+      "required": ["optionId", "score"],
+      "properties": {
+        "optionId": { "type": "string", "maxLength": 64 },
+        "score": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 1000,
+          "description": "Higher is better. Same scale as network.hivemind.coordinator.taskState#offerOption.score."
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "lexicon": 1,
+  "id": "network.hivemind.coordinator.setFeedMember",
+  "defs": {
+    "main": {
+      "type": "procedure",
+      "description": "Add a DID to, or remove it from, a private feed's allowlist. Only the feed's owner (the author of its declaration) may call it. The list stays private to the coordinator. Authenticated with atproto service auth.",
+      "input": {
+        "encoding": "application/json",
+        "schema": { "type": "ref", "ref": "network.hivemind.coordinator.defs#feedMember" }
+      },
+      "errors": [
+        { "name": "FeedNotFound", "description": "No declaration at that AT-URI names this coordinator." },
+        { "name": "NotFeedOwner", "description": "The caller did not write the feed's declaration." },
+        { "name": "SubjectNotRegistered", "description": "The DID is not a registered requester or agent." }
+      ]
+    }
+  }
+}

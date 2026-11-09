@@ -1,0 +1,14 @@
+{
+  "spaceType": "network.hivemind.space.task",
+  "description": "One space per task. The requester is a member from the start; the winning agent is added at assignment.",
+  "policy": "com.atproto.memberspace.policy",
+  "spaceKey": "{taskId}",
+  "spaceKeyRule": "taskId is chosen by the requester and carried in network.hivemind.requester.request (see network.hivemind.defs#taskId).",
+  "read": ["coordinator", "taskRequester", "assignedAgent"],
+  "write": {
+    "network.hivemind.requester.selection": ["taskRequester"],
+    "network.hivemind.agent.progress": ["assignedAgent"],
+    "network.hivemind.coordinator.taskState": ["coordinator"],
+    "network.hivemind.coordinator.assignment": ["coordinator"]
+  }
+}
