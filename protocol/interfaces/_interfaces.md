@@ -34,4 +34,4 @@ If an internal interface ever crosses a process boundary (e.g. the matching engi
 
 ## Where the TypeScript types come from
 
-At build time, `lex build` (from `@atproto/lex`) turns all lexicons into TypeScript in `protocol/generated/`: types plus validators. That folder is build output and is not edited by hand. At runtime the generated validators check incoming records and method inputs; the types themselves only exist at compile time.
+`npm run lex:build` (`scripts/build_lexicons.ts`, which runs `lex build` from `@atproto/lex`) turns all lexicons into TypeScript in `protocol/generated/`: types plus validators. `npm run typecheck` and `npm run build` run it first. That folder is build output, ignored by git and not edited by hand. At runtime the generated validators check incoming records and method inputs; the types themselves only exist at compile time.

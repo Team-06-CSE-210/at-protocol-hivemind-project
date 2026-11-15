@@ -1,0 +1,14 @@
+{
+  "lexicon": 1,
+  "id": "network.hivemind.space.intake",
+  "description": "Space type of the coordinator's single inbox. Requesters write requests and agents write offers; only the coordinator reads. Access rules: type_definition/policy_types/intake.json.",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:main",
+      "name": "Hivemind intake",
+      "description": "Task requests and offers sent to the Hivemind coordinator.",
+      "collections": ["network.hivemind.requester.request", "network.hivemind.agent.offer"]
+    }
+  }
+}

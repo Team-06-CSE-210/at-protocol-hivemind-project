@@ -5,12 +5,12 @@ Hivemind's message types are atproto lexicons (the analogue of ROS `.msg` files)
 - `general/`: record types every task type shares. A record type is defined by its behavior: who writes it, which space or repo it lives in, and whether it changes after writing.
 - `applications/<name>/`: payload objects for one task type. An application never defines records; it only fills the `payload`, `request` and `terms` slots of the general records.
 
-Below each of these folders the path mirrors the NSID (`network/hivemind/agent/offer.json` is `network.hivemind.agent.offer`). The folder names `general` and `applications/<name>` are not part of any NSID; the build merges all trees into one before running codegen.
+Folder paths do not have to mirror the NSIDs: `npm run lex:build` (`scripts/build_lexicons.ts`) reads each file's `id`, places it accordingly and refuses an NSID defined twice.
 
 `general/` has two NSID roots:
 
-- `network/hivemind/`: the open protocol.
-- `internal/hivemind/`: types that never leave Hivemind's own infrastructure. The `internal.` prefix is atproto's convention for these; `@atproto/lex` keeps them out of published SDKs.
+- `network/` (`network.hivemind.*`): the open protocol.
+- `internal/` (`internal.hivemind.*`): types that never leave Hivemind's own infrastructure. The `internal.` prefix is atproto's convention for these; `@atproto/lex` keeps them out of published SDKs.
 
 ## General records
 
@@ -27,6 +27,16 @@ Below each of these folders the path mirrors the NSID (`network/hivemind/agent/o
 | `feed.declaration` | feed owner | public repo | any |
 
 Shared types are in `network.hivemind.defs`: `taskId`, `geoPoint`, `geoCircle`, `geoPolygon`, `money`, `attestation`.
+
+## Space types
+
+Each space type is a lexicon of type `space` that lists the collections its spaces hold. OAuth uses it to expand a `space:<type>` grant into those collections. Who may read and write is in `type_definition/policy_types/`.
+
+| NSID (`network.hivemind.…`) | Space key | Collections |
+| --- | --- | --- |
+| `space.intake` | `main` | `requester.request`, `agent.offer` |
+| `space.feed` | derived from the feed declaration | `coordinator.dispatch` |
+| `space.task` | task ID | `requester.selection`, `agent.progress`, `coordinator.taskState`, `coordinator.assignment` |
 
 ## Coordinator types
 
