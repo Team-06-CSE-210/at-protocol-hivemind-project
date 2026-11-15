@@ -1,1 +1,1 @@
-# at-protocol-hivemind-project
+# AtProtocol Hivemind
