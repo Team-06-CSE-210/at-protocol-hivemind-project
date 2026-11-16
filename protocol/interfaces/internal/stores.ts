@@ -10,6 +10,7 @@ import type {
   Nsid,
   Registration,
   RequesterRequest,
+  SpaceRef,
   TaskId,
   TaskState,
 } from './types.js'
@@ -77,4 +78,13 @@ export interface PublicRecordIndex {
   listFeeds(): Promise<IndexedFeed[]>
   /** Agents whose profile lists the feed. */
   listAgentsServing(feed: AtUri): Promise<Did[]>
+}
+
+/**
+ * Last revision a gateway has synced per space and writer (table sync_cursors). Given one, a
+ * watch resumes where it stopped after a restart instead of replaying every record.
+ */
+export interface RevisionStore {
+  get(space: SpaceRef, writer: Did): Promise<string | undefined>
+  set(space: SpaceRef, writer: Did, revision: string): Promise<void>
 }

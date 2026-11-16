@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.agent.offer",
+  "id": "com.hivemind-network.agent.offer",
   "defs": {
     "main": {
       "type": "record",
@@ -10,12 +10,12 @@
         "type": "object",
         "required": ["taskId", "decision", "createdAt"],
         "properties": {
-          "taskId": { "type": "ref", "ref": "network.hivemind.defs#taskId" },
+          "taskId": { "type": "ref", "ref": "com.hivemind-network.defs#taskId" },
           "decision": { "type": "string", "enum": ["accept", "decline"] },
           "payload": {
             "type": "union",
             "refs": [],
-            "description": "Required when decision is accept: the task type's #offer object, e.g. network.hivemind.mobility.ride#offer. These are the terms the agent commits to."
+            "description": "Required when decision is accept: the task type's #offer object, e.g. com.hivemind-network.mobility.ride#offer. These are the terms the agent commits to."
           },
           "declineReason": {
             "type": "string",
@@ -31,7 +31,7 @@
       "type": "object",
       "description": "The agent's state when it answered.",
       "properties": {
-        "position": { "type": "ref", "ref": "network.hivemind.defs#geoPoint" },
+        "position": { "type": "ref", "ref": "com.hivemind-network.defs#geoPoint" },
         "batteryPercent": { "type": "integer", "minimum": 0, "maximum": 100 },
         "operationalStatus": {
           "type": "string",

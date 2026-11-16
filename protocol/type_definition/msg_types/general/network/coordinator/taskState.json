@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.coordinator.taskState",
+  "id": "com.hivemind-network.coordinator.taskState",
   "defs": {
     "main": {
       "type": "record",
@@ -64,7 +64,7 @@
         "terms": {
           "type": "union",
           "refs": [],
-          "description": "The offer's payload, e.g. network.hivemind.mobility.ride#offer."
+          "description": "The offer's payload, e.g. com.hivemind-network.mobility.ride#offer."
         }
       }
     }

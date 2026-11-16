@@ -1,11 +1,11 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.coordinator.defs",
+  "id": "com.hivemind-network.coordinator.defs",
   "description": "Types of the coordinator's methods that the coordinator also keeps in its own storage.",
   "defs": {
     "registration": {
       "type": "object",
-      "description": "A participant's registration with the coordinator. Returned by network.hivemind.coordinator.register; kept in the coordinator's participant store.",
+      "description": "A participant's registration with the coordinator. Returned by com.hivemind-network.coordinator.register; kept in the coordinator's participant store.",
       "required": ["subject", "role", "status", "registeredAt"],
       "properties": {
         "subject": { "type": "string", "format": "did" },
@@ -30,13 +30,13 @@
     },
     "feedMember": {
       "type": "object",
-      "description": "One allowlist entry of a private feed. Input of network.hivemind.coordinator.setFeedMember; kept in the coordinator's feed member store. An agent on the list may read the feed's dispatches; a requester on the list may have requests routed into the feed.",
+      "description": "One allowlist entry of a private feed. Input of com.hivemind-network.coordinator.setFeedMember; kept in the coordinator's feed member store. An agent on the list may read the feed's dispatches; a requester on the list may have requests routed into the feed.",
       "required": ["feed", "subject", "allowed"],
       "properties": {
         "feed": {
           "type": "string",
           "format": "at-uri",
-          "description": "AT-URI of the network.hivemind.feed.declaration."
+          "description": "AT-URI of the com.hivemind-network.feed.declaration."
         },
         "subject": { "type": "string", "format": "did" },
         "allowed": { "type": "boolean" }

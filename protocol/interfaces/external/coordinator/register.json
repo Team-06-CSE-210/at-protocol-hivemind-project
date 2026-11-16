@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.coordinator.register",
+  "id": "com.hivemind-network.coordinator.register",
   "defs": {
     "main": {
       "type": "procedure",
@@ -19,14 +19,14 @@
             "subject": {
               "type": "string",
               "format": "did",
-              "description": "Role agent only: the agent's DID. The caller must be an active operator, and the agent's network.hivemind.agent.profile must name the caller as its operator. Other roles always register the caller."
+              "description": "Role agent only: the agent's DID. The caller must be an active operator, and the agent's com.hivemind-network.agent.profile must name the caller as its operator. Other roles always register the caller."
             }
           }
         }
       },
       "output": {
         "encoding": "application/json",
-        "schema": { "type": "ref", "ref": "network.hivemind.coordinator.defs#registration" }
+        "schema": { "type": "ref", "ref": "com.hivemind-network.coordinator.defs#registration" }
       },
       "errors": [
         { "name": "NotOperator", "description": "Role agent, but the caller is not an active operator." },

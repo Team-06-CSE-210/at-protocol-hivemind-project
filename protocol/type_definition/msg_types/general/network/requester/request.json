@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.requester.request",
+  "id": "com.hivemind-network.requester.request",
   "defs": {
     "main": {
       "type": "record",
@@ -10,11 +10,11 @@
         "type": "object",
         "required": ["taskId", "payload", "createdAt"],
         "properties": {
-          "taskId": { "type": "ref", "ref": "network.hivemind.defs#taskId" },
+          "taskId": { "type": "ref", "ref": "com.hivemind-network.defs#taskId" },
           "payload": {
             "type": "union",
             "refs": [],
-            "description": "The task type's #request object, e.g. network.hivemind.mobility.ride#request. The task type is the NSID of the payload's lexicon (its $type without the #fragment)."
+            "description": "The task type's #request object, e.g. com.hivemind-network.mobility.ride#request. The task type is the NSID of the payload's lexicon (its $type without the #fragment)."
           },
           "selectionMode": {
             "type": "string",

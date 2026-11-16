@@ -9,12 +9,12 @@ Folder paths do not have to mirror the NSIDs: `npm run lex:build` (`scripts/buil
 
 `general/` has two NSID roots:
 
-- `network/` (`network.hivemind.*`): the open protocol.
-- `internal/` (`internal.hivemind.*`): types that never leave Hivemind's own infrastructure. The `internal.` prefix is atproto's convention for these; `@atproto/lex` keeps them out of published SDKs.
+- `network/` (`com.hivemind-network.*`): the open protocol, under Hivemind's domain hivemind-network.com. The domain is what lets us publish these lexicons later (see ADR-002 in `docs/ADR.md`).
+- `internal/` (`internal.hivemind.*`): types that never leave Hivemind's own infrastructure. The top-level `internal` root belongs to no domain and is never published; Bluesky does the same for its own (`internal.bsky.*`).
 
 ## General records
 
-| NSID (`network.hivemind.…`) | Written by | Lives in | Record key |
+| NSID (`com.hivemind-network.…`) | Written by | Lives in | Record key |
 | --- | --- | --- | --- |
 | `requester.request` | requester | intake space | tid |
 | `requester.selection` | requester | task space | self |
@@ -26,13 +26,13 @@ Folder paths do not have to mirror the NSIDs: `npm run lex:build` (`scripts/buil
 | `coordinator.assignment` | coordinator | task space | self |
 | `feed.declaration` | feed owner | public repo | any |
 
-Shared types are in `network.hivemind.defs`: `taskId`, `geoPoint`, `geoCircle`, `geoPolygon`, `money`, `attestation`.
+Shared types are in `com.hivemind-network.defs`: `taskId`, `geoPoint`, `geoCircle`, `geoPolygon`, `money`, `attestation`.
 
 ## Space types
 
 Each space type is a lexicon of type `space` that lists the collections its spaces hold. OAuth uses it to expand a `space:<type>` grant into those collections. Who may read and write is in `type_definition/policy_types/`.
 
-| NSID (`network.hivemind.…`) | Space key | Collections |
+| NSID (`com.hivemind-network.…`) | Space key | Collections |
 | --- | --- | --- |
 | `space.intake` | `main` | `requester.request`, `agent.offer` |
 | `space.feed` | derived from the feed declaration | `coordinator.dispatch` |
@@ -44,14 +44,14 @@ Types that only the coordinator's interfaces use, kept here so every type lives 
 
 | NSID | Types | Used by |
 | --- | --- | --- |
-| `network.hivemind.coordinator.defs` | `registration`, `feedMember` | the coordinator's methods (`interfaces/external`) and its stores |
+| `com.hivemind-network.coordinator.defs` | `registration`, `feedMember` | the coordinator's methods (`interfaces/external`) and its stores |
 | `internal.hivemind.coordinator.defs` | `scoringCriterion`, `featureValue`, `rankCandidate`, `rankedOption` | task type modules and the matching engine (`interfaces/internal`) |
 
 Deleting a record is part of the protocol: a requester cancels by deleting its request, an agent withdraws by deleting its offer, and the coordinator closes a dispatch by deleting it.
 
 ## Task types
 
-A task type is one lexicon in `applications/`, named after the task rather than the machine (`network.hivemind.mobility.ride`, not `...autonomousTaxi`). It defines:
+A task type is one lexicon in `applications/`, named after the task rather than the machine (`com.hivemind-network.mobility.ride`, not `...autonomousTaxi`). It defines:
 
 - `#request`: what is asked for
 - `#offer`: what an agent commits to

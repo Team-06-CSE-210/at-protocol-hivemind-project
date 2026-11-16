@@ -1,5 +1,5 @@
 {
-  "spaceType": "network.hivemind.space.feed",
+  "spaceType": "com.hivemind-network.space.feed",
   "description": "One space per feed declaration, carrying that feed's dispatches. Only eligible agents read.",
   "policy": {
     "$type": "com.atproto.managedspace.policy",
@@ -7,9 +7,9 @@
     "publishPolicy": false
   },
   "spaceKey": "{feedKey}",
-  "spaceKeyRule": "feedKey = lowercase base32 (RFC 4648, no padding) of the first 16 bytes of SHA-256 over the UTF-8 AT-URI of the feed's network.hivemind.feed.declaration. Agents compute it from the feeds in their profile; no lookup needed.",
+  "spaceKeyRule": "feedKey = lowercase base32 (RFC 4648, no padding) of the first 16 bytes of SHA-256 over the UTF-8 AT-URI of the feed's com.hivemind-network.feed.declaration. Agents compute it from the feeds in their profile; no lookup needed.",
   "read": ["coordinator", "eligibleAgent"],
   "write": {
-    "network.hivemind.coordinator.dispatch": ["coordinator"]
+    "com.hivemind-network.coordinator.dispatch": ["coordinator"]
   }
 }

@@ -1,0 +1,55 @@
+{
+	"timeScale": 10,
+	"tickMs": 250,
+	"roadDistanceFactor": 1.3,
+	"vehicles": [
+		{
+			"id": "taxi-1",
+			"displayName": "Hivemind Taxi 1",
+			"model": "Robotaxi R1",
+			"plate": "HM-001",
+			"seats": 4,
+			"start": { "latE7": 327157000, "lonE7": -1171611000 },
+			"speedMetersPerSecond": 11,
+			"maxPickupDistanceMeters": 8000,
+			"pricing": {
+				"currency": "USD",
+				"baseFareMinor": 250,
+				"perKilometerMinor": 120,
+				"perMinuteMinor": 30
+			}
+		},
+		{
+			"id": "taxi-2",
+			"displayName": "Hivemind Taxi 2",
+			"model": "Robotaxi R1",
+			"plate": "HM-002",
+			"seats": 4,
+			"start": { "latE7": 327549000, "lonE7": -1171970000 },
+			"speedMetersPerSecond": 11,
+			"maxPickupDistanceMeters": 8000,
+			"pricing": {
+				"currency": "USD",
+				"baseFareMinor": 250,
+				"perKilometerMinor": 110,
+				"perMinuteMinor": 30
+			}
+		},
+		{
+			"id": "van-3",
+			"displayName": "Hivemind Van 3",
+			"model": "Robovan V1",
+			"plate": "HM-003",
+			"seats": 6,
+			"start": { "latE7": 328801000, "lonE7": -1172340000 },
+			"speedMetersPerSecond": 10,
+			"maxPickupDistanceMeters": 10000,
+			"pricing": {
+				"currency": "USD",
+				"baseFareMinor": 350,
+				"perKilometerMinor": 140,
+				"perMinuteMinor": 35
+			}
+		}
+	]
+}

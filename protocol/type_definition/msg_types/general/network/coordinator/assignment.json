@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.coordinator.assignment",
+  "id": "com.hivemind-network.coordinator.assignment",
   "defs": {
     "main": {
       "type": "record",
@@ -12,7 +12,7 @@
         "properties": {
           "taskId": {
             "type": "ref",
-            "ref": "network.hivemind.defs#taskId",
+            "ref": "com.hivemind-network.defs#taskId",
             "description": "Part of the signed content, so the assignment cannot be replayed into another task."
           },
           "agent": { "type": "string", "format": "did" },
@@ -20,15 +20,15 @@
           "request": {
             "type": "union",
             "refs": [],
-            "description": "The request's payload with exact values, e.g. network.hivemind.mobility.ride#request."
+            "description": "The request's payload with exact values, e.g. com.hivemind-network.mobility.ride#request."
           },
           "terms": {
             "type": "union",
             "refs": [],
-            "description": "The accepted offer's payload, e.g. network.hivemind.mobility.ride#offer."
+            "description": "The accepted offer's payload, e.g. com.hivemind-network.mobility.ride#offer."
           },
           "issuedAt": { "type": "string", "format": "datetime" },
-          "attestation": { "type": "ref", "ref": "network.hivemind.defs#attestation" }
+          "attestation": { "type": "ref", "ref": "com.hivemind-network.defs#attestation" }
         }
       }
     }

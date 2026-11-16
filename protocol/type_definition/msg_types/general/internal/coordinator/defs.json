@@ -50,7 +50,7 @@
           "type": "integer",
           "minimum": 0,
           "maximum": 1000,
-          "description": "Higher is better. Same scale as network.hivemind.coordinator.taskState#offerOption.score."
+          "description": "Higher is better. Same scale as com.hivemind-network.coordinator.taskState#offerOption.score."
         }
       }
     }

@@ -63,6 +63,8 @@ export interface AtprotoGateway {
 	): Promise<void>;
 
 	// Following a space -> onChange called for every record already in it
+	// -> later changes arrive in order per writer (not across writers); if a record changes
+	//    several times between two syncs, only its latest state may arrive
 	// -> returns SpaceAccessDeniedError if account may not read the space
 	// -> this method is used for notifying an agent that it did not win a task
 	// Further error msg deliverable by an authority: UserNotAuthorized, NotAuthorized, SpaceNotFound
