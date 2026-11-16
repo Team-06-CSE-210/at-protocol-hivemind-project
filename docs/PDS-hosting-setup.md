@@ -57,21 +57,24 @@ curl -s http://localhost:3000/xrpc/com.atproto.server.describeServer
 - Created a single-use invite code through the admin-authenticated `com.atproto.server.createInviteCode` endpoint.
 - Created a local `.test` account using `com.atproto.server.createAccount`.
 - Successfully authenticated with `com.atproto.server.createSession` (`LOGIN SUCCESS`).
+- Successfully created a Memberspace using `com.atproto.space.createSpace` (HTTP 200).
+- Successfully retrieved the created Space using `com.atproto.space.listSpaces` and `com.atproto.space.getSpace` (HTTP 200).
+- Configured the Memberspace policy with `publicRead: false` and `publicWrite: false`.
 
-These checks verify local PDS startup, advertised Spaces Alpha support, and account registration/login. **They do not yet verify creation or access control of an actual Space.**
+These checks verify local PDS startup, account registration/login, and basic Spaces Alpha operations (create, list, and get). However, membership enforcement and authenticated record read/write operations have not yet been tested.
 
 ## Remaining work
 
-1. Test Space creation, membership/access, and authenticated reads/writes using the Spaces Alpha API.
+1. Test Space membership, access control enforcement, and authenticated record reads/writes using the Spaces Alpha API.
 2. Connect the Hivemind Coordinator and its SDK adapters to the real local PDS.
 3. Run end-to-end tests against the local alpha stack.
-4. Add persistent Docker storage and reproducible configuration before retaining any test data.
+4. Complete migration to the named Docker volume (`hivemind-pds-data`) and verify data persistence across container restarts.
 5. For a future public deployment, configure a real domain, HTTPS, and appropriate DID/service identity records.
 
 ## Safety and limitations
 
 - `PDS_DEV_MODE=true` and `localhost` are for **local development only**, not production.
-- The command uses `--rm` without a persistent volume: container data can disappear after the container is removed.
+- The current container uses an anonymous Docker volume with `--rm`. A local backup has been created, and a named Docker volume (`hivemind-pds-data`) has been created, but migration and persistence verification are not yet complete.
 - Spaces Alpha is experimental; do not use sensitive or irreplaceable data.
 - Never commit or share actual JWTs, passwords, PLC private keys, invite codes, or session tokens.
 - The Hivemind Coordinator's planned JSON/Postgres operational database is **separate** from the PDS's own local database.
