@@ -8,13 +8,17 @@
 		"test": "tests"
 	},
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
+		"test": "npm run build && node --test dist/tests/*.test.js dist/tests/integration/*.test.js",
+		"test:unit": "node --experimental-strip-types --test tests/*.test.ts",
+		"test:schemas": "npm run build && node --test dist/tests/integration/*.test.js",
 		"build": "npm run lex:build && tsc -p tsconfig.json",
 		"typecheck": "npm run lex:build && tsc -p tsconfig.json --noEmit",
 		"lint": "biome lint .",
 		"check": "biome check .",
 		"fix": "biome check --write .",
-		"lex:build": "node scripts/build_lexicons.ts"
+		"lex:build": "node scripts/build_lexicons.ts",
+		"demo:offers": "npm run build && node dist/scripts/offer_routing_demo.js",
+		"demo:offers:local": "node --experimental-strip-types scripts/offer_routing_local_demo.ts"
 	},
 	"repository": {
 		"type": "git",

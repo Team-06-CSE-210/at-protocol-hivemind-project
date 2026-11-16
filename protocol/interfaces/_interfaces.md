@@ -29,6 +29,7 @@ Defined as TypeScript interfaces, because lexicons describe data and HTTP method
 | `atproto_gateway.ts` | `AtprotoGateway`, `SpaceAuthority` | real PDS client, in-memory fake | coordinator, client library |
 | `attestation.ts` | `AttestationSigner`, `AttestationVerifier` | coordinator, client library | coordinator, agents |
 | `client_lib.ts` | `AgentBehavior`, `AgentClient`, `RequesterClient`, `OrganizationClient` | client library (operators implement `AgentBehavior`) | demo, view, operators |
+| `offer_routing.ts` | envelope validation, eligibility, payload validation and routing observers | generated validators, registry/task modules, application wiring | agent offer router, coordinator intake router |
 
 If an internal interface ever crosses a process boundary (e.g. the matching engine as a Java service), it gets an XRPC lexicon under `internal.hivemind.*` built from the same message types.
 
