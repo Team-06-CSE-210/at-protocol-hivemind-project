@@ -4,6 +4,10 @@
 		"module": "NodeNext",
 		"strict": true,
 		"types": ["node"],
+		"allowImportingTsExtensions": true,
+		"rewriteRelativeImportExtensions": true,
+		"erasableSyntaxOnly": true,
+		"skipLibCheck": true,
 		"rootDir": ".",
 		"outDir": "dist"
 	},

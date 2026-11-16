@@ -8,10 +8,11 @@
 		"test": "tests"
 	},
 	"scripts": {
-		"test": "echo \"Error: no test specified\" && exit 1",
+		"test": "node --env-file-if-exists=.env --test \"tests/**/*.test.ts\"",
 		"build": "npm run lex:build && tsc -p tsconfig.json",
 		"typecheck": "npm run lex:build && tsc -p tsconfig.json --noEmit",
 		"lint": "biome lint .",
+		"dev:network": "node scripts/dev_network.ts",
 		"check": "biome check .",
 		"fix": "biome check --write .",
 		"lex:build": "node scripts/build_lexicons.ts"
