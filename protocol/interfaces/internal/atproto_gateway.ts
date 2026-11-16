@@ -4,66 +4,92 @@ import type {
 } from "@atproto/api";
 import type { AtUri, Did, Nsid, SpaceRef, TypedObject } from "./types.js";
 
-/**
- * The only way Hivemind code talks to atproto. Hides login sessions, service auth, space
- * credentials (bound to a P-256 key, with every request signed), MAC checks on synced space
- * data, notification registration and catch-up.
- *
- * Implementations: one for a real PDS (the Spaces alpha pinned in package.json), one in memory
- * for tests.
- * Used by: the coordinator and the client library (one gateway per account).
- */
+
+// The only way our Hivemind Application direclty interfaces with atproto
+
+// Contains TWO main implementations: one for real atproto PDSes and one in-memory variant for local tests
+// Used by: the coordinator and the client library (one gateway instance per account)
+
+// Hides login sessions, service authentication, space credentials (bound to P-256 key, with every request signed)
+// MAC checks on synced space data, notification registration and catch-up
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Atproto Gateway
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 export interface AtprotoGateway {
-	/** The account this gateway acts as. */
+	// the DID of the account
 	readonly did: Did;
 
-	/** Create or replace a record in the account's public repo. */
+	// * * * * * * * * * * * * * * * * * *
+	// PDS Interaction
+	// * * * * * * * * * * * * * * * * * * 
+
+	// Write or replace record on the account repo (PDS)
 	putRecord(
 		collection: Nsid,
 		rkey: string,
 		record: TypedObject,
 	): Promise<AtUri>;
-	deleteRecord(collection: Nsid, rkey: string): Promise<void>;
-	/** Read one public record, e.g. an agent's profile. */
-	getRecord(uri: AtUri): Promise<TypedObject | undefined>;
 
-	/** Create or replace a record in the account's own repo inside a space. */
+	// Delete record from an account repo (PDS)
+	deleteRecord(
+		collection: Nsid, 
+		rkey: string
+	): Promise<void>;
+
+	// read record from a profile (user or agent)
+	getRecord(
+		uri: AtUri
+	): Promise<TypedObject | undefined>;
+
+	// * * * * * * * * * * * * * * * * * *
+	// Space Interaction
+	// * * * * * * * * * * * * * * * * * * 
+
+	// Create or replace a record on the account's repo inside an atproto space
 	putSpaceRecord(
 		space: SpaceRef,
 		collection: Nsid,
 		rkey: string,
 		record: TypedObject,
 	): Promise<void>;
+
+	// Delete a record from a space
 	deleteSpaceRecord(
 		space: SpaceRef,
 		collection: Nsid,
 		rkey: string,
 	): Promise<void>;
 
-	/**
-	 * Follow a space: onChange is called for every record already in it, then for every later
-	 * create, update and delete, in space order. Resolves to a function that stops following.
-	 * Rejects with SpaceAccessDeniedError if the account may not read the space; that is how an
-	 * agent learns it did not win a task. An authority may answer a refusal as UserNotAuthorized,
-	 * NotAuthorized or SpaceNotFound, so all three map to this error. A requester retries briefly
-	 * on it, because its task space may not have been created yet.
-	 */
+	// Following a space -> onChange called for every record already in it
+	// -> returns SpaceAccessDeniedError if account may not read the space
+	// -> this method is used for notifying an agent that it did not win a task
+	// Further error msg deliverable by an authority: UserNotAuthorized, NotAuthorized, SpaceNotFound
 	watchSpace(
 		space: SpaceRef,
 		onChange: (change: RecordChange) => void,
 	): Promise<() => void>;
 
-	/** Follow public records of the given collections across the network (the firehose). */
+	// Follow public records by collection identifier (the firehose)
 	watchPublic(
 		collections: Nsid[],
 		onChange: (change: RecordChange) => void,
 	): Promise<() => void>;
 
-	/** Call an XRPC procedure on a service (e.g. the coordinator) with service auth for this account. */
-	callProcedure(service: Did, method: Nsid, input: unknown): Promise<unknown>;
+	// Call XRPC procedure on a service (e.g. the coordinator) with service auth for this account
+	callProcedure(
+		service: Did, 
+		method: Nsid, 
+		input: unknown
+	): Promise<unknown>;
 }
 
-/** The policies Hivemind spaces use, exactly as com.atproto.space.createSpace takes them. */
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Space Policies
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// The policies Hivemind spaces use, exactly as com.atproto.space.createSpace takes them.
 export type SpacePolicy =
 	| (ComAtprotoManagedspacePolicy.Main & {
 			$type: "com.atproto.managedspace.policy";
@@ -72,15 +98,22 @@ export type SpacePolicy =
 			$type: "com.atproto.memberspace.policy";
 	  });
 
-/** Space administration. Only the coordinator has one, as the authority of every Hivemind space. */
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Space Authority
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// Space administration. Only the coordinator has one, as the authority of every Hivemind space.
 export interface SpaceAuthority {
-	/** Create a space under the coordinator's DID; the policy comes from type_definition/policy_types/. */
+
+	// Create a space under the coordinator's DID; the policy comes from type_definition/policy_types/.
 	createSpace(
 		spaceType: Nsid,
 		spaceKey: string,
 		policy: SpacePolicy,
 	): Promise<SpaceRef>;
-	/** Memberspace only (task spaces). Managed spaces have no member list; the PDS answers PolicyMismatch. */
+
+	// Add Member to a Memberspace (only works for this type) -> Used for task spaces. 
+	// Managed spaces have no member list; the PDS answers PolicyMismatch. 
 	putMember(
 		space: SpaceRef,
 		member: Did,
@@ -89,7 +122,11 @@ export interface SpaceAuthority {
 	removeMember(space: SpaceRef, member: Did): Promise<void>;
 }
 
-/** One record change, in a space or in a public repo. */
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Space Record Change
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+// One record change, in a space or in a public repo.
 export interface RecordChange {
 	action: "create" | "update" | "delete";
 	author: Did;
