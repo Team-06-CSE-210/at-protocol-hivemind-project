@@ -147,15 +147,20 @@ export class AgentOfferRouter {
 		} catch {
 			return { status: "rejected", reason: "invalidDispatch" };
 		}
-		if (!this.isOpen(dispatch)) {
-			return { status: "ignored", reason: "deadlinePassed" };
-		}
 		const previousTask = this.taskByDispatch.get(dispatchKey);
 		if (previousTask && previousTask !== dispatch.taskId) {
 			return { status: "rejected", reason: "dispatchTaskChanged" };
 		}
-		this.taskByDispatch.set(dispatchKey, dispatch.taskId);
 		let pending = this.offers.get(dispatch.taskId);
+		// The in-flight decision must see deadline updates, even when this update
+		// is already expired or will otherwise be ignored because the task is busy.
+		if (pending && !pending.closed && !pending.sent) {
+			pending.dispatch = { ...pending.dispatch, respondBy: dispatch.respondBy };
+		}
+		if (!this.isOpen(dispatch)) {
+			return { status: "ignored", reason: "deadlinePassed" };
+		}
+		this.taskByDispatch.set(dispatchKey, dispatch.taskId);
 		if (pending?.closed || pending?.sent || pending?.busy) {
 			return { status: "ignored", reason: "alreadyAnsweredOrClosed" };
 		}
@@ -176,9 +181,11 @@ export class AgentOfferRouter {
 				if (offer.decision === "accept" && !offer.payload) {
 					return { status: "rejected", reason: "acceptWithoutPayload" };
 				}
+				pending.offer = offer;
+			}
+			if (!pending.rkey) {
 				const rkey = this.options.createRkey();
 				if (!rkey) throw new Error("Offer record key must not be empty");
-				pending.offer = offer;
 				pending.rkey = rkey;
 			}
 			// An operator's decision may take time. Recheck closure and the deadline

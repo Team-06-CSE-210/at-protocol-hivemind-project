@@ -177,6 +177,125 @@ test("agent rechecks the deadline after the behavior finishes", async () => {
 	});
 });
 
+test("pending agent decision applies shorter deadlines, including expired updates", async () => {
+	for (const updateAt of [NOW, NOW + 2_000]) {
+		const context = setup();
+		const decision = Promise.withResolvers<void>();
+		let now = NOW;
+		let decisions = 0;
+		const writes: unknown[] = [];
+		const unwatch = await context.network
+			.gateway(COORDINATOR)
+			.watchSpace(INTAKE, (change) => writes.push(change));
+		context.senderOptions.now = () => now;
+		context.senderOptions.behavior.onDispatch = async () => {
+			decisions++;
+			await decision.promise;
+			return { decision: "accept", payload: OFFER_PAYLOAD };
+		};
+		const sender = new AgentOfferRouter(context.senderOptions);
+		const pending = sender.handleChange(dispatchChange());
+		now = updateAt;
+		const update = await sender.handleChange(
+			dispatchChange({
+				action: "update",
+				record: { ...makeDispatch(), respondBy: new Date(NOW + 1_000).toISOString() },
+			}),
+		);
+		assert.equal(update.status, "ignored");
+		now = NOW + 2_000;
+		decision.resolve();
+		assert.deepEqual(await pending, {
+			status: "ignored",
+			reason: "dispatchClosedOrExpired",
+		});
+		assert.equal(decisions, 1);
+		assert.equal(writes.length, 0);
+		unwatch();
+	}
+});
+
+test("pending agent decision uses the latest extended deadline", async () => {
+	const context = setup();
+	const decision = Promise.withResolvers<void>();
+	let now = NOW;
+	let decisions = 0;
+	context.senderOptions.now = () => now;
+	context.senderOptions.behavior.onDispatch = async () => {
+		decisions++;
+		await decision.promise;
+		return { decision: "accept", payload: OFFER_PAYLOAD };
+	};
+	const sender = new AgentOfferRouter(context.senderOptions);
+	const pending = sender.handleChange(dispatchChange());
+	for (const deadline of [NOW + 1_000, NOW + 20_000]) {
+		if (deadline === NOW + 20_000) now = NOW + 12_000;
+		const update = await sender.handleChange(
+			dispatchChange({
+				action: "update",
+				record: { ...makeDispatch(), respondBy: new Date(deadline).toISOString() },
+			}),
+		);
+		assert.equal(update.status, "ignored");
+	}
+	decision.resolve();
+	assert.equal((await pending).status, "sent");
+	assert.equal(decisions, 1);
+});
+
+test("deadline updates do not reopen a closed dispatch during evaluation", async () => {
+	const context = setup();
+	const decision = Promise.withResolvers<void>();
+	context.senderOptions.behavior.onDispatch = async () => {
+		await decision.promise;
+		return { decision: "accept", payload: OFFER_PAYLOAD };
+	};
+	const sender = new AgentOfferRouter(context.senderOptions);
+	const pending = sender.handleChange(dispatchChange());
+	await sender.handleChange(dispatchChange({ action: "delete", record: undefined }));
+	assert.deepEqual(
+		await sender.handleChange(
+			dispatchChange({
+				action: "update",
+				record: { ...makeDispatch(), respondBy: new Date(NOW + 20_000).toISOString() },
+			}),
+		),
+		{ status: "ignored", reason: "alreadyAnsweredOrClosed" },
+	);
+	decision.resolve();
+	assert.deepEqual(await pending, {
+		status: "ignored",
+		reason: "dispatchClosedOrExpired",
+	});
+});
+
+test("deadline updates do not resend an already-sent offer", async () => {
+	const context = setup();
+	let decisions = 0;
+	const writes: unknown[] = [];
+	const unwatch = await context.network
+		.gateway(COORDINATOR)
+		.watchSpace(INTAKE, (change) => writes.push(change));
+	context.senderOptions.behavior.onDispatch = async () => {
+		decisions++;
+		return { decision: "accept", payload: OFFER_PAYLOAD };
+	};
+	const sender = new AgentOfferRouter(context.senderOptions);
+	assert.equal((await sender.handleChange(dispatchChange())).status, "sent");
+	assert.deepEqual(
+		await sender.handleChange(
+			dispatchChange({
+				action: "update",
+				record: { ...makeDispatch(), respondBy: new Date(NOW + 20_000).toISOString() },
+			}),
+		),
+		{ status: "ignored", reason: "alreadyAnsweredOrClosed" },
+	);
+	assert.equal(decisions, 1);
+	assert.equal(writes.length, 1);
+	unwatch();
+});
+
 test("deleting a dispatch while the behavior is evaluating prevents the offer write", async () => {
 	const context = setup();
 	const decision = Promise.withResolvers<void>();
@@ -198,6 +317,11 @@ test("a failed write can be retried with the same offer/key, without another dec
 	const gateway = context.senderOptions.gateway;
 	const keys: string[] = [];
 	let decisions = 0;
+	let keyCalls = 0;
+	context.senderOptions.createRkey = () => {
+		keyCalls++;
+		return "3m22222222223";
+	};
 	context.senderOptions.behavior.onDispatch = async () => {
 		decisions++;
 		return { decision: "accept", payload: OFFER_PAYLOAD };
@@ -214,6 +338,7 @@ test("a failed write can be retried with the same offer/key, without another dec
 	await assert.rejects(sender.handleChange(dispatchChange()), /transport failure/);
 	assert.equal((await sender.handleChange(dispatchChange())).status, "sent");
 	assert.equal(decisions, 1);
+	assert.equal(keyCalls, 1);
 	assert.equal(keys.length, 2);
 	assert.equal(keys[0], keys[1]);
 });
@@ -444,19 +569,18 @@ test("watchers process existing records on startup, stop cleanly, and restart id
 	await intake.stop();
 });
 
-test("a store failure rejects the caller without breaking later intake processing", async () => {
+test("exhausted store retries reject the caller without breaking later intake processing", async () => {
 	const context = setup();
 	await context.taskStore.put(makeTask());
 	const store = context.taskStore;
-	let failOnce = true;
+	let failures = 0;
 	context.intakeOptions.taskStore = {
 		get: (id) => store.get(id),
 		findByRecord: (author, collection, rkey) =>
 			store.findByRecord(author, collection, rkey),
 		listOpen: () => store.listOpen(),
 		put: async (task) => {
-			if (failOnce) {
-				failOnce = false;
+			if (++failures <= 3) {
 				throw new Error("temporary storage failure");
 			}
 			await store.put(task);
@@ -465,6 +589,127 @@ test("a store failure rejects the caller without breaking later intake processin
 	const intake = new OfferIntakeRouter(context.intakeOptions);
 	await assert.rejects(intake.handleChange(offerChange()), /storage failure/);
 	assert.equal((await intake.handleChange(offerChange())).status, "stored");
+});
+
+test("a background offer automatically recovers from a failed store write", async () => {
+	const context = setup();
+	await context.taskStore.put(makeTask());
+	const put = context.taskStore.put.bind(context.taskStore);
+	let attempts = 0;
+	context.taskStore.put = async (task) => {
+		if (++attempts === 1) throw new Error("temporary storage failure");
+		await put(task);
+	};
+	const intake = new OfferIntakeRouter(context.intakeOptions);
+	await intake.start();
+	try {
+		// Deliver exactly one notification. The router must recover without a second
+		// gateway event, manual handleChange call, or watcher restart.
+		await context.network
+			.gateway(AGENT)
+			.putSpaceRecord(INTAKE, OFFER_COLLECTION, "3m22222222223", makeOffer());
+		await intake.drain();
+		assert.equal(attempts, 2);
+		assert.equal((await context.taskStore.get(TASK_ID))?.offers.length, 1);
+		assert.equal(context.results[0]?.status, "stored");
+		assert.deepEqual(context.errors, []);
+	} finally {
+		await intake.stop();
+	}
+});
+
+test("background store retries are bounded and report exhaustion once", async () => {
+	const context = setup();
+	await context.taskStore.put(makeTask());
+	const failure = new Error("persistent storage failure");
+	let attempts = 0;
+	context.taskStore.put = async () => {
+		attempts++;
+		throw failure;
+	};
+	const intake = new OfferIntakeRouter(context.intakeOptions);
+	await intake.start();
+	try {
+		await context.network
+			.gateway(AGENT)
+			.putSpaceRecord(INTAKE, OFFER_COLLECTION, "3m22222222223", makeOffer());
+		await intake.drain();
+		await Promise.resolve();
+		assert.equal(attempts, 3);
+		assert.deepEqual(context.errors, [failure]);
+		assert.deepEqual(context.results, []);
+		assert.equal((await context.taskStore.get(TASK_ID))?.offers.length, 0);
+	} finally {
+		await intake.stop();
+	}
+});
+
+test("a store retry stops if collection closes or its deadline passes", async () => {
+	for (const closeBy of ["phase", "deadline"]) {
+		const context = setup();
+		await context.taskStore.put(makeTask());
+		const put = context.taskStore.put.bind(context.taskStore);
+		let attempts = 0;
+		context.taskStore.put = async () => {
+			attempts++;
+			const task = makeTask();
+			if (closeBy === "phase") task.state.phase = "assigned";
+			else task.state.respondBy = new Date(NOW).toISOString();
+			await put(task);
+			throw new Error("storage failed while collection closed");
+		};
+		const intake = new OfferIntakeRouter(context.intakeOptions);
+		assert.deepEqual(await intake.handleChange(offerChange()), {
+			status: "rejected",
+			reason: "collectionClosed",
+		});
+		assert.equal(attempts, 1);
+		assert.equal((await context.taskStore.get(TASK_ID))?.offers.length, 0);
+	}
+});
+
+test("a write committed before an error is not duplicated on automatic retry", async () => {
+	const context = setup();
+	await context.taskStore.put(makeTask());
+	const put = context.taskStore.put.bind(context.taskStore);
+	let attempts = 0;
+	context.taskStore.put = async (task) => {
+		attempts++;
+		await put(task);
+		throw new Error("write committed but acknowledgement failed");
+	};
+	const intake = new OfferIntakeRouter(context.intakeOptions);
+	assert.deepEqual(await intake.handleChange(offerChange()), {
+		status: "ignored",
+		reason: "alreadyAnswered",
+	});
+	assert.equal(attempts, 1);
+	assert.equal((await context.taskStore.get(TASK_ID))?.offers.length, 1);
+});
+
+test("an automatic retry preserves other answers written after the first failure", async () => {
+	const context = setup();
+	await context.taskStore.put(makeTask());
+	const put = context.taskStore.put.bind(context.taskStore);
+	let attempts = 0;
+	context.taskStore.put = async (task) => {
+		if (++attempts === 1) {
+			const updated = makeTask();
+			updated.offers.push({
+				agent: OTHER_AGENT,
+				rkey: "3m22222222224",
+				offer: makeOffer(),
+			});
+			await put(updated);
+			throw new Error("temporary storage failure");
+		}
+		await put(task);
+	};
+	const intake = new OfferIntakeRouter(context.intakeOptions);
+	assert.equal((await intake.handleChange(offerChange())).status, "stored");
+	const task = await context.taskStore.get(TASK_ID);
+	assert.deepEqual(task?.offers.map((entry) => entry.agent), [OTHER_AGENT, AGENT]);
+	assert.equal(attempts, 2);
 });
 
 test("background failures are reported through the injected observer", async () => {
@@ -496,16 +741,53 @@ test("an invalid dispatch is rejected before calling the behavior", async () => 
 	assert.equal(called, false);
 });
 
-test("a failure generating a record key does not poison later attempts", async () => {
+test("a failure generating a record key retries without requesting another offer", async () => {
 	const context = setup();
 	let calls = 0;
+	let decisions = 0;
+	let now = NOW;
+	context.senderOptions.now = () => now;
+	context.senderOptions.behavior.onDispatch = async () => {
+		decisions++;
+		return { decision: "accept", payload: OFFER_PAYLOAD };
+	};
 	context.senderOptions.createRkey = () => {
 		if (++calls === 1) throw new Error("TID generator unavailable");
 		return "3m22222222223";
 	};
 	const sender = new AgentOfferRouter(context.senderOptions);
 	await assert.rejects(sender.handleChange(dispatchChange()), /TID generator/);
+	now += 1_000;
+	const result = await sender.handleChange(dispatchChange());
+	assert.equal(result.status, "sent");
+	assert.equal(decisions, 1);
+	assert.equal(calls, 2);
+	if (result.status === "sent") {
+		assert.equal(result.offer.createdAt, new Date(NOW).toISOString());
+	}
+});
+
+test("an empty record key is rejected and retried without requesting another offer", async () => {
+	const context = setup();
+	let calls = 0;
+	let decisions = 0;
+	const writes: unknown[] = [];
+	const unwatch = await context.network
+		.gateway(COORDINATOR)
+		.watchSpace(INTAKE, (change) => writes.push(change));
+	context.senderOptions.behavior.onDispatch = async () => {
+		decisions++;
+		return { decision: "accept", payload: OFFER_PAYLOAD };
+	};
+	context.senderOptions.createRkey = () => (++calls === 1 ? "" : "3m22222222223");
+	const sender = new AgentOfferRouter(context.senderOptions);
+	await assert.rejects(sender.handleChange(dispatchChange()), /key must not be empty/);
+	assert.equal(writes.length, 0);
 	assert.equal((await sender.handleChange(dispatchChange())).status, "sent");
+	assert.equal(decisions, 1);
+	assert.equal(calls, 2);
+	assert.equal(writes.length, 1);
+	unwatch();
 });
 
 test("an unauthorized writer cannot put an offer in the intake space", async () => {

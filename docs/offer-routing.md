@@ -140,11 +140,17 @@ instead forward changes directly to `handleChange()` and await its result.
 - The same task arriving through several feeds triggers one answer per router
   instance. A dispatch deletion or deadline reached during evaluation prevents a
   subsequent write.
+  Validated updates refresh the active task's deadline while its decision is pending;
+  closed tasks and already-sent offers remain ignored.
 - An agent writes `network.hivemind.agent.offer`. Both acceptances and declines
   are collected. Taxi pricing belongs in the injected behavior.
-- A failed write can be retried by forwarding the dispatch again. A prepared
-  offer and its record key are reused, so an ambiguous write failure does not
+- A failed agent gateway write can be retried by forwarding the dispatch again.
+  A prepared offer and its record key are reused, so an ambiguous write failure does not
   produce a second record. Automatic backoff belongs in the gateway or caller.
+- Coordinator offer-storage writes retry automatically, up to three total attempts,
+  with waits of 25 ms and 50 ms. Every attempt re-reads the task and checks collection
+  state, the deadline and existing answers before writing. Exhaustion reaches the
+  caller or `onError`; recovery does not depend on another watcher notification.
 - The coordinator trusts `RecordChange.author`, not identity fields inside a
   record. Wrong collections/spaces are ignored; invalid or unauthorized offers
   are rejected with a reason.

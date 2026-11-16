@@ -19,6 +19,9 @@ import type {
 	SpaceRef,
 } from "../../protocol/interfaces/internal/types.js";
 
+const MAX_STORE_WRITE_ATTEMPTS = 3;
+const STORE_WRITE_RETRY_DELAY_MS = 25;
+
 export interface OfferIntakeOptions
 	extends OfferRoutingObserver<OfferIntakeResult> {
 	gateway: Pick<AtprotoGateway, "watchSpace">;
@@ -132,23 +135,33 @@ export class OfferIntakeRouter {
 			}
 		}
 
-		// Eligibility/payload checks can await external services. The task may have
-		// closed during that time, so fetch its current state before persisting.
-		const current = await this.options.taskStore.get(task.taskId);
-		if (!current || !this.isCollecting(current)) {
-			return { status: "rejected", reason: "collectionClosed" };
+		// Recover failed writes within this delivery: watchSpace does not promise
+		// to replay a notification when an async consumer fails. Read fresh state
+		// before each attempt, including when a write committed before reporting an error.
+		for (let attempt = 1; ; attempt++) {
+			const current = await this.options.taskStore.get(task.taskId);
+			if (!current || !this.isCollecting(current)) {
+				return { status: "rejected", reason: "collectionClosed" };
+			}
+			if (current.offers.some((entry) => entry.agent === change.author)) {
+				return { status: "ignored", reason: "alreadyAnswered" };
+			}
+			try {
+				await this.options.taskStore.put({
+					...current,
+					offers: [
+						...current.offers,
+						{ agent: change.author, rkey: change.rkey, offer },
+					],
+				});
+				return { status: "stored", taskId: current.taskId, agent: change.author };
+			} catch (error) {
+				if (attempt >= MAX_STORE_WRITE_ATTEMPTS) throw error;
+				await new Promise((resolve) =>
+					setTimeout(resolve, STORE_WRITE_RETRY_DELAY_MS * attempt),
+				);
+			}
 		}
-		if (current.offers.some((entry) => entry.agent === change.author)) {
-			return { status: "ignored", reason: "alreadyAnswered" };
-		}
-		await this.options.taskStore.put({
-			...current,
-			offers: [
-				...current.offers,
-				{ agent: change.author, rkey: change.rkey, offer },
-			],
-		});
-		return { status: "stored", taskId: current.taskId, agent: change.author };
 	}
 
 	private async withdraw(change: RecordChange): Promise<OfferIntakeResult> {
