@@ -8,7 +8,7 @@ This documents the initial local AT Protocol PDS setup for the CSE 210 Hivemind 
 
 - Intel Mac running macOS Monterey 12.7.6
 - Docker Desktop with a working Docker Engine
-- Image: `ghcr.io/bluesky-social/atproto:pds-spaces-alpha`
+- Image: `ghcr.io/bluesky-social/atproto@sha256:70073bb96e55cfd967af0a10fcade42f0c85c1c372c81a61ee3f32601d14a741` 
 - Local endpoint: `http://localhost:3000`
 
 ## Start the local PDS
@@ -16,7 +16,7 @@ This documents the initial local AT Protocol PDS setup for the CSE 210 Hivemind 
 Pull the image:
 
 ```sh
-docker pull ghcr.io/bluesky-social/atproto:pds-spaces-alpha
+docker pull ghcr.io/bluesky-social/atproto@sha256:70073bb96e55cfd967af0a10fcade42f0c85c1c372c81a61ee3f32601d14a741
 ```
 
 Generate **development-only** secrets in the same terminal used to start the container:
@@ -40,7 +40,7 @@ docker run --rm \
   -e PDS_JWT_SECRET \
   -e PDS_ADMIN_PASSWORD \
   -e PDS_PLC_ROTATION_KEY_K256_PRIVATE_KEY_HEX \
-  ghcr.io/bluesky-social/atproto:pds-spaces-alpha
+  ghcr.io/bluesky-social/atproto@sha256:70073bb96e55cfd967af0a10fcade42f0c85c1c372c81a61ee3f32601d14a741
 ```
 
 Leave this terminal running. From another terminal, verify:
