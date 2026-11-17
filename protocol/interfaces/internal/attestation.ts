@@ -2,7 +2,7 @@ import type { Assignment, Attestation, Did } from './types.js'
 
 /*
  * Signing and checking assignments. The rule both sides must follow is in the description of
- * network.hivemind.defs#attestation: ES256 over the DAG-CBOR encoding of the assignment without
+ * com.hivemind-network.defs#attestation: ES256 over the DAG-CBOR encoding of the assignment without
  * its attestation field.
  */
 

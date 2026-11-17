@@ -3,7 +3,7 @@ import type { FeatureValue, GeoPoint, Nsid, ScoringCriterion, TypedObject } from
 /**
  * The coordinator's half of an application: everything the coordinator must know about one
  * task type. Each lexicon in type_definition/msg_types/applications/ gets exactly one module,
- * e.g. the ride module for network.hivemind.mobility.ride.
+ * e.g. the ride module for com.hivemind-network.mobility.ride.
  *
  * Owner: coordinator. Implemented once per application.
  */

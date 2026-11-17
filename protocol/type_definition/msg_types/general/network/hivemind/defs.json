@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.defs",
+  "id": "com.hivemind-network.defs",
   "description": "Shared types used by the general Hivemind messages and by application payloads.",
   "defs": {
     "taskId": {
@@ -68,7 +68,7 @@
           "type": "string",
           "format": "uri",
           "maxLength": 512,
-          "description": "DID URL of the verification method, e.g. did:web:hivemind.network#hivemind_attestation."
+          "description": "DID URL of the verification method, e.g. did:web:hivemind-network.com#hivemind_attestation."
         },
         "signature": {
           "type": "bytes",

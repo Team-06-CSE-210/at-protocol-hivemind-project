@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.space.feed",
+  "id": "com.hivemind-network.space.feed",
   "description": "Space type of one feed: the coordinator's dispatches for that feed, readable by eligible agents only. The space key is derived from the feed declaration's AT-URI. Access rules: type_definition/policy_types/feed.json.",
   "defs": {
     "main": {
@@ -8,7 +8,7 @@
       "key": "any",
       "name": "Hivemind feed",
       "description": "Calls for offers routed into one feed.",
-      "collections": ["network.hivemind.coordinator.dispatch"]
+      "collections": ["com.hivemind-network.coordinator.dispatch"]
     }
   }
 }

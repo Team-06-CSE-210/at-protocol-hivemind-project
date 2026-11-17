@@ -5,7 +5,7 @@ Nov 8, 2026 · @Philipp
 Every term the Hivemind project uses or depends on, sorted A to Z. Each entry carries one mark right after its name:
 
 - **(atproto term)**: a fixed AT Protocol term, used exactly as the official specs at [atproto.com/specs](https://atproto.com/specs) define it. **(atproto term, Spaces alpha)** marks terms from the permissioned-data alpha (build of 2026-10-29), which may still change before release.
-- **(hivemind notation)**: a naming convention internal to this project: our lexicons under `network.hivemind`, our roles, components and code names. Nobody outside Hivemind will recognise these.
+- **(hivemind notation)**: a naming convention internal to this project: our lexicons under `com.hivemind-network`, our roles, components and code names. Nobody outside Hivemind will recognise these.
 - **(general term)**: a standard computing or industry term that neither atproto nor Hivemind owns.
 
 Where Hivemind reuses a word that atproto already uses differently (agent, feed, subscription), the entry gives both meanings. Names in `monospace` are the code, file or lexicon names you will find in the repository.
@@ -22,7 +22,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Agent kind** (hivemind notation): The `agentKind` field of an agent profile: `vehicle`, `mobileRobot`, `manipulator`, `chargingStation` or `other`.
 
-**Agent profile** (hivemind notation): Public record `network.hivemind.agent.profile` (record key `self`) in the agent's own repo. States display name, agent kind, operator, supported task types, capabilities and operating area.
+**Agent profile** (hivemind notation): Public record `com.hivemind-network.agent.profile` (record key `self`) in the agent's own repo. States display name, agent kind, operator, supported task types, capabilities and operating area.
 
 **Agent runtime** (hivemind notation): The software that runs an agent on the network: it holds the agent's keys, reads its feed spaces, writes offers and status updates, and executes assignments. Built on the `HivemindAgent` SDK class and run by the operator.
 
@@ -32,17 +32,17 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **allowedApps** (atproto term, Spaces alpha): Member-space policy field listing the apps (service identifiers) allowed to access the space on a member's behalf.
 
-**Allowlist** (hivemind notation): The two DID lists a private feed's owner keeps: agents allowed to read its dispatches, and requesters allowed to post into it. Managed through `network.hivemind.feed.putMember` and `removeMember`; only the coordinator sees the lists.
+**Allowlist** (hivemind notation): The two DID lists a private feed's owner keeps: agents allowed to read its dispatches, and requesters allowed to post into it. Managed through `com.hivemind-network.feed.putMember` and `removeMember`; only the coordinator sees the lists.
 
 **Answer window** (hivemind notation): How long the coordinator collects offers after dispatching, set per feed as `answerWindowMs` in the feed declaration. For one task, the longest window among the matched feeds applies, capped by the request's `maxWaitMs`.
 
-**App View** (atproto term): A service that reads the firehose, indexes the records it cares about and serves app-specific queries, like Bluesky's App View for posts. The coordinator's indexer plays this role for `network.hivemind.*` public records.
+**App View** (atproto term): A service that reads the firehose, indexes the records it cares about and serves app-specific queries, like Bluesky's App View for posts. The coordinator's indexer plays this role for `com.hivemind-network.*` public records.
 
-**Assignment** (hivemind notation): Record `network.hivemind.task.assignment` (record key `self`) that the coordinator writes into the task space. Names the winning agent, the requester, the request and the agreed terms, and carries the coordinator's attestation. Agents act only on assignments whose signature checks out.
+**Assignment** (hivemind notation): Record `com.hivemind-network.task.assignment` (record key `self`) that the coordinator writes into the task space. Names the winning agent, the requester, the request and the agreed terms, and carries the coordinator's attestation. Agents act only on assignments whose signature checks out.
 
 **AT Protocol / atproto** (atproto term): The Authenticated Transfer Protocol: an open, federated protocol for apps built on portable identities (DIDs, handles), signed data repositories, PDSes, relays, App Views, lexicons and XRPC. Hivemind runs on it; Bluesky is its best-known app.
 
-**AT-URI** (atproto term): The address of a record: `at://{DID or handle}/{collection NSID}/{record key}`, e.g. `at://did:plc:abc…/network.hivemind.feed.declaration/downtown`. We call it a record address in plain language.
+**AT-URI** (atproto term): The address of a record: `at://{DID or handle}/{collection NSID}/{record key}`, e.g. `at://did:plc:abc…/com.hivemind-network.feed.declaration/downtown`. We call it a record address in plain language.
 
 **atproto-proxy** (atproto term): HTTP header (`atproto-proxy: {DID}#{service fragment}`) that asks a PDS to forward an XRPC call, with a service auth token, to the named service. Lets an app reach the coordinator through the user's own PDS.
 
@@ -68,11 +68,11 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 ## C
 
-**Cancellation** (hivemind notation): Record `network.hivemind.task.cancellation` that the requester writes into the task space, with an optional reason. The coordinator then closes the task's dispatches and moves the task to `cancelled`.
+**Cancellation** (hivemind notation): Record `com.hivemind-network.task.cancellation` that the requester writes into the task space, with an optional reason. The coordinator then closes the task's dispatches and moves the task to `cancelled`.
 
 **Capabilities** (hivemind notation): The task-type-specific part of an agent profile. For rides: seat count, pricing model (`baseFare`, `perKilometer`, `perMinute`) and maximum pickup distance.
 
-**Certification** (hivemind notation): Public record `network.hivemind.registry.certification` in the coordinator's own repo, stating that a DID is a registered participant in good standing (`subject`, `role`, `operator`, `plan`, `issuedAt`). Anyone can check it on the firehose; deleting it suspends the participant.
+**Certification** (hivemind notation): Public record `com.hivemind-network.registry.certification` in the coordinator's own repo, stating that a DID is a registered participant in good standing (`subject`, `role`, `operator`, `plan`, `issuedAt`). Anyone can check it on the firehose; deleting it suspends the participant.
 
 **checkUserAccess** (atproto term, Spaces alpha): Method `com.atproto.managedspace.checkUserAccess`. The space authority calls the managing app with it to ask whether a DID may read or write a managed space. The coordinator answers from its registry, the feed subscriptions and the allowlists.
 
@@ -84,15 +84,17 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **collecting** (hivemind notation): First task phase: dispatches are out and offers come in until the answer window ends or every eligible agent has answered.
 
-**Collection** (atproto term): All records of one type in a repository, named by the NSID of their lexicon, e.g. `network.hivemind.feed.declaration`. The middle part of an AT-URI.
+**Collection** (atproto term): All records of one type in a repository, named by the NSID of their lexicon, e.g. `com.hivemind-network.feed.declaration`. The middle part of an AT-URI.
+
+**com.hivemind-network** (hivemind notation): The NSID authority for every Hivemind lexicon, collection, space type and method: the domain `hivemind-network.com` reversed.
 
 **Commit** (atproto term): A signed snapshot of a repository: its DID, revision (`rev`), the root CID of its MST and a signature by the account's signing key. Relays broadcast every public commit on the firehose.
 
-**Coordinator** (hivemind notation): The Hivemind service (`did:web:hivemind.network`, placeholder) in `packages/coordinator`. It indexes public records, keeps the registry and billing, owns the intake, feed and task spaces, routes requests, ranks offers and signs assignments. Only Hivemind runs it; companies cannot host their own.
+**Coordinator** (hivemind notation): The Hivemind service (`did:web:hivemind-network.com`) in `packages/coordinator`. It indexes public records, keeps the registry and billing, owns the intake, feed and task spaces, routes requests, ranks offers and signs assignments. Only Hivemind runs it; companies cannot host their own.
 
-**Coordinator API** (hivemind notation): The XRPC methods the coordinator serves (`coordinator-api.ts`): `network.hivemind.coordinator.describe`, `registry.register`, `registry.enrollAgent`, `registry.getStatus`, `feed.getFeed`, `feed.putMember` and `feed.removeMember`, plus the Spaces callbacks `checkUserAccess` and `notifyWrite`.
+**Coordinator API** (hivemind notation): The XRPC methods the coordinator serves (`coordinator-api.ts`): `com.hivemind-network.coordinator.describe`, `registry.register`, `registry.enrollAgent`, `registry.getStatus`, `feed.getFeed`, `feed.putMember` and `feed.removeMember`, plus the Spaces callbacks `checkUserAccess` and `notifyWrite`.
 
-**Coordinator description** (hivemind notation): What `network.hivemind.coordinator.describe` returns: the coordinator's DID, its intake space, the ID of its attestation key and the task types it supports. The first call any participant makes.
+**Coordinator description** (hivemind notation): What `com.hivemind-network.coordinator.describe` returns: the coordinator's DID, its intake space, the ID of its attestation key and the task types it supports. The first call any participant makes.
 
 **Coverage** (hivemind notation): A feed's geographic area in its declaration, as a `geoCircle` or `geoPolygon`. A request is routed to the feed only if its routing points lie inside the coverage.
 
@@ -120,9 +122,9 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **did:plc** (atproto term): The DID method made for atproto: identities registered in the PLC directory, with key rotation and migration between PDSes. Requesters and agents on the Hivemind PDS get did:plc identities.
 
-**did:web** (atproto term): A DID tied to a domain, resolved from `https://{domain}/.well-known/did.json`. The coordinator uses `did:web:hivemind.network` (placeholder until the domain is registered); losing the domain means losing the identity.
+**did:web** (atproto term): A DID tied to a domain, resolved from `https://{domain}/.well-known/did.json`. The coordinator uses `did:web:hivemind-network.com`; losing the domain means losing the identity.
 
-**Dispatch** (hivemind notation): Record `network.hivemind.task.dispatch` that the coordinator writes into a feed space, one per matched feed: task ID, task type, payload, feed, task space, `respondBy`, state (`open` / `closed`) and closed reason. It names no requester, though today's task ID still embeds the requester's DID suffix (see Task ID).
+**Dispatch** (hivemind notation): Record `com.hivemind-network.task.dispatch` that the coordinator writes into a feed space, one per matched feed: task ID, task type, payload, feed, task space, `respondBy`, state (`open` / `closed`) and closed reason. It names no requester, though today's task ID still embeds the requester's DID suffix (see Task ID).
 
 ## E–F
 
@@ -132,7 +134,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **End user** (hivemind notation): A person who asks for tasks, using Hivemind for free with an account on the Hivemind PDS. Called requester in the protocol and rider in the taxi demo.
 
-**Enrollment** (hivemind notation): An operator adding one of its agents through `network.hivemind.registry.enrollAgent`. Starts the agent's monthly fee and publishes the agent's certification.
+**Enrollment** (hivemind notation): An operator adding one of its agents through `com.hivemind-network.registry.enrollAgent`. Starts the agent's monthly fee and publishes the agent's certification.
 
 **expired** (hivemind notation): Task phase and closed reason when the requester did not pick an option before `selectBy` (selection window: 60 s by default, 45 s in the taxi demo).
 
@@ -144,21 +146,21 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Feed access** (hivemind notation): The `access` setting of a feed declaration. `public`: every certified agent that subscribes can read it, and every requester's matching request goes there. `private`: only allowlisted agents can read and only allowlisted requesters can post.
 
-**Feed declaration** (hivemind notation): Public record `network.hivemind.feed.declaration` in the feed owner's repo, modelled on Bluesky's `app.bsky.feed.generator`. Holds display name, description, coordinator, coverage, task types, access, `answerWindowMs` and scoring settings.
+**Feed declaration** (hivemind notation): Public record `com.hivemind-network.feed.declaration` in the feed owner's repo, modelled on Bluesky's `app.bsky.feed.generator`. Holds display name, description, coordinator, coverage, task types, access, `answerWindowMs` and scoring settings.
 
 **Feed generator** (atproto term): A Bluesky service that builds a custom timeline, announced by an `app.bsky.feed.generator` record in its owner's repo. Part of Bluesky's app lexicons rather than the core protocol; the model for Hivemind's feed declarations.
 
 **Feed owner** (hivemind notation): The account that publishes a feed declaration: an interest group, fleet company, campus or warehouse. Free of charge; controls the feed's access, allowlists, answer window and scoring.
 
-**Feed space** (hivemind notation): The managed space that carries one feed's dispatches: `at://{coordinator DID}/space/network.hivemind.space.feed/{declaration rkey}.{owner DID suffix}`. The coordinator is its authority and decides who reads it.
+**Feed space** (hivemind notation): The managed space that carries one feed's dispatches: `at://{coordinator DID}/space/com.hivemind-network.space.feed/{declaration rkey}.{owner DID suffix}`. The coordinator is its authority and decides who reads it.
 
-**Feed subscription** (hivemind notation): Public record `network.hivemind.feed.subscription` in an agent's repo that names a feed it serves, like a follow. The coordinator grants feed-space access only to subscribed agents that are also certified (and allowlisted, for private feeds).
+**Feed subscription** (hivemind notation): Public record `com.hivemind-network.feed.subscription` in an agent's repo that names a feed it serves, like a follow. The coordinator grants feed-space access only to subscribed agents that are also certified (and allowlisted, for private feeds).
 
 **Firehose** (atproto term): The event stream a relay serves (`com.atproto.sync.subscribeRepos`) with every public commit of every repository it crawls. The coordinator's indexer reads it; space data never appears on it.
 
 ## G–I
 
-**geoPoint, geoCircle, geoPolygon** (hivemind notation): Shared geometry types in `network.hivemind.defs`. A point is `latE7` / `lonE7` in degE7; a circle is a centre plus `radiusMeters`; a polygon is an ordered, implicitly closed list of points.
+**geoPoint, geoCircle, geoPolygon** (hivemind notation): Shared geometry types in `com.hivemind-network.defs`. A point is `latE7` / `lonE7` in degE7; a circle is a centre plus `radiusMeters`; a polygon is an ordered, implicitly closed list of points.
 
 **goat** (general term): Bluesky's official command-line tool for atproto, written in Go. Creates accounts, edits PLC identities, inspects repositories and records and checks lexicons; useful once we move off the simulation.
 
@@ -166,9 +168,9 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Headline** (hivemind notation): One-line summary of an offer shown to the requester inside an offer option (e.g. pickup time and price), produced by the task type module.
 
-**Hivemind** (hivemind notation): This project: a ROS-inspired open standard (the `network.hivemind` lexicons) plus a coordination service that lets autonomous systems take tasks from people over atproto.
+**Hivemind** (hivemind notation): This project: a ROS-inspired open standard (the `com.hivemind-network` lexicons) plus a coordination service that lets autonomous systems take tasks from people over atproto.
 
-**Hivemind PDS** (hivemind notation): The PDS Hivemind operates (`pds.hivemind.network` in the demo, invite-only). Hosts end-user accounts for free, agents of operators that do not self-host, and the coordinator's own account, which makes it the space host of every Hivemind space.
+**Hivemind PDS** (hivemind notation): The PDS Hivemind operates (`pds.hivemind-network.com` in the demo, invite-only). Hosts end-user accounts for free, agents of operators that do not self-host, and the coordinator's own account, which makes it the space host of every Hivemind space.
 
 **HivemindAgent** (hivemind notation): SDK class in `packages/sdk/src/hivemind-agent.ts` that turns an AgentBehavior into a working agent: publishes profile and subscriptions, reads feed spaces, writes offers, verifies assignments and reports status.
 
@@ -180,9 +182,9 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **IdentityResolver** (hivemind notation): Interface in `packages/atproto-core/src/identity.ts` for atproto identity resolution: DID to DID document, and handle to DID. The simulation implements it as `SimIdentityDirectory`; production would call the PLC directory and `did:web` hosts.
 
-**Indexer** (hivemind notation): The coordinator's `PublicRecordIndexer`. Reads the firehose and keeps every `network.hivemind.*` public record (agent profiles, feed declarations, feed subscriptions, certifications) as the coordinator's current picture of the network.
+**Indexer** (hivemind notation): The coordinator's `PublicRecordIndexer`. Reads the firehose and keeps every `com.hivemind-network.*` public record (agent profiles, feed declarations, feed subscriptions, certifications) as the coordinator's current picture of the network.
 
-**Intake space** (hivemind notation): The coordinator's single managed space `at://{coordinator DID}/space/network.hivemind.space.intake/main`. Requesters write requests and agents write offers into it; only the coordinator can read it.
+**Intake space** (hivemind notation): The coordinator's single managed space `at://{coordinator DID}/space/com.hivemind-network.space.intake/main`. Requesters write requests and agents write offers into it; only the coordinator can read it.
 
 **Interest group** (hivemind notation): Any group (company, campus, community, warehouse) that sets up a feed so that tasks in its area reach the agents it chooses.
 
@@ -208,7 +210,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Managed space** (atproto term, Spaces alpha): A space whose policy (`com.atproto.managedspace.policy`) hands every access decision to a managing app, which the space authority asks through `checkUserAccess`. Hivemind's intake space and feed spaces are managed spaces, so the coordinator's registry decides who gets in.
 
-**Managing app** (atproto term, Spaces alpha): The service named in a managed-space policy that decides access, given as a service identifier. For Hivemind: `did:web:hivemind.network#hivemind_coordinator`.
+**Managing app** (atproto term, Spaces alpha): The service named in a managed-space policy that decides access, given as a service identifier. For Hivemind: `did:web:hivemind-network.com#hivemind_coordinator`.
 
 **MatchingEngine** (hivemind notation): Planned interface that would move ranking and optimisation into a separate matching service (possibly Java or Kotlin, with a solver such as Timefold or OR-Tools). Today ranking runs in TypeScript in `packages/coordinator/src/matching/`.
 
@@ -216,13 +218,11 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Member space** (atproto term, Spaces alpha): A space whose policy (`com.atproto.memberspace.policy`) is an explicit member list with read and write flags, kept by the authority through `putMember`, `removeMember` and `listMembers`. Options: `publicRead`, `publicWrite`, `allowedApps`, `publishPolicy`, `publishMembers`. Hivemind's task spaces are member spaces.
 
-**Money** (hivemind notation): The `money` object in `network.hivemind.defs`: an integer `amountMinor` in the currency's smallest unit (cents for USD) plus an ISO currency code. Billing uses micros (millionths of a unit) for fees below one cent.
+**Money** (hivemind notation): The `money` object in `com.hivemind-network.defs`: an integer `amountMinor` in the currency's smallest unit (cents for USD) plus an ISO currency code. Billing uses micros (millionths of a unit) for fees below one cent.
 
 **MST** (atproto term): Merkle Search Tree, the data structure of a repository. It maps every `collection/rkey` path to a record CID, and its root CID goes into each commit.
 
 **Network delay per hop** (hivemind notation): Demo setting that adds simulated latency to every XRPC call, to feel how a globe-spanning network behaves. Set in the demo header, next to simulated time speed.
-
-**network.hivemind** (hivemind notation): The NSID authority for every Hivemind lexicon, collection, space type and method. It is the domain `hivemind.network` reversed and a placeholder until that or another domain is registered.
 
 **noCoverage** (hivemind notation): Task phase when no feed's coverage and task types match the request, so nothing is dispatched.
 
@@ -234,11 +234,11 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **notifyWrite** (atproto term, Spaces alpha): Method `com.atproto.space.notifyWrite`. A writer's repo host calls the space authority after a write; the authority gives the write a spaceRev and forwards the notice to every service registered with registerNotify. This is how the coordinator learns of new requests and offers without polling.
 
-**NSID** (atproto term): Namespaced Identifier: a reversed domain plus a name, e.g. `network.hivemind.task.offer`. Names lexicons, collections, XRPC methods and space types.
+**NSID** (atproto term): Namespaced Identifier: a reversed domain plus a name, e.g. `com.hivemind-network.task.offer`. Names lexicons, collections, XRPC methods and space types.
 
 ## O
 
-**Offer** (hivemind notation): Record `network.hivemind.task.offer` that an agent writes into the intake space in answer to a dispatch: task ID, feed, decision, decline reason, payload and agent snapshot. For rides the payload holds pickup ETA, trip distance and duration, price and vehicle. Neither the requester nor competing operators can read it.
+**Offer** (hivemind notation): Record `com.hivemind-network.task.offer` that an agent writes into the intake space in answer to a dispatch: task ID, feed, decision, decline reason, payload and agent snapshot. For rides the payload holds pickup ETA, trip distance and duration, price and vehicle. Neither the requester nor competing operators can read it.
 
 **Offer option** (hivemind notation): One ranked choice the requester sees in the task state (`offerOption`): option ID, agent, agent and operator display names, score, headline and terms. A filtered view of an offer; the raw offers stay with the coordinator.
 
@@ -262,7 +262,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **P-256** (general term): The NIST elliptic curve secp256r1 (signature algorithm ES256). One of the two curves atproto allows for signing keys, next to K-256; the prototype uses it for every key.
 
-**Payload** (hivemind notation): The task-type-specific body of a request, dispatch, offer or assignment, typed by an open union. For rides: `network.hivemind.mobility.ride#request` (pickup, dropoff, passenger count) and `#offer`.
+**Payload** (hivemind notation): The task-type-specific body of a request, dispatch, offer or assignment, typed by an open union. For rides: `com.hivemind-network.mobility.ride#request` (pickup, dropoff, passenger count) and `#offer`.
 
 **PDS** (atproto term): Personal Data Server: hosts accounts and their repositories, handles login, and signs and serves records. In the Spaces alpha a PDS also stores its users' permissioned repos (repo host) and runs spaces for its accounts (space host).
 
@@ -280,7 +280,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Private feed** (hivemind notation): A feed with `access: private`; see Feed access.
 
-**Procedure** (atproto term): Lexicon type for an XRPC method that changes state, sent as HTTP POST, e.g. `network.hivemind.registry.register`.
+**Procedure** (atproto term): Lexicon type for an XRPC method that changes state, sent as HTTP POST, e.g. `com.hivemind-network.registry.register`.
 
 **Protocol inspector** (hivemind notation): Demo panel that lists every XRPC call, firehose commit, space write and coordinator decision from the trace. *Show plumbing* adds credentials, polling and access checks.
 
@@ -288,11 +288,11 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Public record** (hivemind notation): A record in an account's public repository, sent to relays and visible on the firehose. Hivemind keeps only participant and feed information there: agent profiles, feed declarations, feed subscriptions, certifications.
 
-**putMember** (atproto term, Spaces alpha): Method `com.atproto.memberspace.putMember`, by which a member space's authority adds a DID with read and/or write rights. Not to be confused with Hivemind's `network.hivemind.feed.putMember` (hivemind notation), by which a feed owner allowlists a DID on a private feed.
+**putMember** (atproto term, Spaces alpha): Method `com.atproto.memberspace.putMember`, by which a member space's authority adds a DID with read and/or write rights. Not to be confused with Hivemind's `com.hivemind-network.feed.putMember` (hivemind notation), by which a feed owner allowlists a DID on a private feed.
 
 ## Q–R
 
-**Query** (atproto term): Lexicon type for a read-only XRPC method, sent as HTTP GET, e.g. `network.hivemind.coordinator.describe`.
+**Query** (atproto term): Lexicon type for a read-only XRPC method, sent as HTTP GET, e.g. `com.hivemind-network.coordinator.describe`.
 
 **Ranking** (hivemind notation): How the coordinator orders accepted offers: simple additive weighting. Each scoring feature is min-max normalised across the offers (inverted where lower is better), weighted, and summed into a score from 0 to 1000; rides default to 50 % pickup time, 40 % price, 10 % trip time.
 
@@ -312,7 +312,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Repository / repo** (atproto term): An account's signed set of records, organised as an MST and versioned by commits. Portable: it can be exported and moved to another PDS.
 
-**Request** (hivemind notation): Record `network.hivemind.task.request` that the requester writes into the intake space: task type, payload, selection mode and `maxWaitMs`. The start of every task; only the coordinator can read it.
+**Request** (hivemind notation): Record `com.hivemind-network.task.request` that the requester writes into the intake space: task type, payload, selection mode and `maxWaitMs`. The start of every task; only the coordinator can read it.
 
 **Request proof** (atproto term, Spaces alpha): A signature by the bound key on each request that uses a space credential, proving the caller holds that key. The alpha uses HTTP message signatures (RFC 9421); the simulation uses a signed JWS header instead.
 
@@ -342,7 +342,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **selectBy** (hivemind notation): Deadline in the task state by which the requester must pick an option in choose mode; after it the task is `expired`.
 
-**Selection** (hivemind notation): Record `network.hivemind.task.selection` that the requester writes into the task space, naming the chosen option ID.
+**Selection** (hivemind notation): Record `com.hivemind-network.task.selection` that the requester writes into the task space, naming the chosen option ID.
 
 **Selection mode** (hivemind notation): The request's `selectionMode`: `auto` (coordinator assigns the best offer) or `choose` (requester picks from ranked options).
 
@@ -350,7 +350,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Service auth** (atproto term): A short-lived JWT, signed with the caller's signing key, that proves to another service which account is calling. Claims: `iss` (caller DID), `aud` (service DID), `lxm` (the one method it is valid for), `exp`. Obtained from the caller's PDS via `com.atproto.server.getServiceAuth`; every call to the coordinator API uses it.
 
-**Service entry / service identifier** (atproto term): An entry in a DID document's `service` list (fragment ID, type, endpoint URL). The service identifier `{DID}#{fragment}` names one service, e.g. `did:web:hivemind.network#hivemind_coordinator`.
+**Service entry / service identifier** (atproto term): An entry in a DID document's `service` list (fragment ID, type, endpoint URL). The service identifier `{DID}#{fragment}` names one service, e.g. `did:web:hivemind-network.com#hivemind_coordinator`.
 
 **Session** (atproto term): A login to a PDS (`com.atproto.server.createSession`), giving an access token and a refresh token for further calls on the account's behalf.
 
@@ -372,9 +372,9 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Space key / skey** (atproto term, Spaces alpha): The last part of a space reference, chosen by the authority. Hivemind uses `main` for the intake space, `{declaration rkey}.{owner DID suffix}` for feed spaces and the task ID for task spaces.
 
-**Space reference** (atproto term, Spaces alpha): The address of a space: `at://{authority DID}/space/{space type}/{space key}`, e.g. `at://did:web:hivemind.network/space/network.hivemind.space.intake/main`.
+**Space reference** (atproto term, Spaces alpha): The address of a space: `at://{authority DID}/space/{space type}/{space key}`, e.g. `at://did:web:hivemind-network.com/space/com.hivemind-network.space.intake/main`.
 
-**Space type** (atproto term, Spaces alpha): An NSID that says what kind of space it is. Hivemind defines `network.hivemind.space.intake`, `network.hivemind.space.feed` and `network.hivemind.space.task`.
+**Space type** (atproto term, Spaces alpha): An NSID that says what kind of space it is. Hivemind defines `com.hivemind-network.space.intake`, `com.hivemind-network.space.feed` and `com.hivemind-network.space.task`.
 
 **SpaceReader** (hivemind notation): Client class in `packages/atproto-client` that reads one space for one account: gets a delegation token, exchanges it for a space credential, signs request proofs and registers for notifications.
 
@@ -384,7 +384,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **SpaceSyncer** (hivemind notation): Client class that keeps a local copy of a space current: on each notification it calls listRepoOps for the changed writer and reports every record change to its owner.
 
-**Status update** (hivemind notation): Record `network.hivemind.task.statusUpdate` that the assigned agent writes into the task space: `status` (`accepted`, `enRoute`, `arrived`, `inProgress`, `completed`, `failed`), position, ETA and note. ROS action feedback; `completed` is the result.
+**Status update** (hivemind notation): Record `com.hivemind-network.task.statusUpdate` that the assigned agent writes into the task space: `status` (`accepted`, `enRoute`, `arrived`, `inProgress`, `completed`, `failed`), position, ETA and note. ROS action feedback; `completed` is the result.
 
 **subscribeRepos** (atproto term): Method `com.atproto.sync.subscribeRepos`, the WebSocket stream behind the firehose.
 
@@ -398,11 +398,11 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Task ID** (hivemind notation): The identifier of a task, today `{request rkey}-{requester DID suffix}`. Derived rather than assigned, so the requester knows its task space the moment it writes the request. Planned change: an opaque hash with a nonce, because the current form reveals the requester to every agent that sees a dispatch.
 
-**Task space** (hivemind notation): The member space of one task, `at://{coordinator DID}/space/network.hivemind.space.task/{task ID}`. The coordinator owns it and adds the requester right away; the winning agent joins at assignment. Holds the task state, selection, assignment, status updates and cancellation. Created when the request arrives today; planned to be created only at assignment and deleted after a retention period.
+**Task space** (hivemind notation): The member space of one task, `at://{coordinator DID}/space/com.hivemind-network.space.task/{task ID}`. The coordinator owns it and adds the requester right away; the winning agent joins at assignment. Holds the task state, selection, assignment, status updates and cancellation. Created when the request arrives today; planned to be created only at assignment and deleted after a retention period.
 
-**Task state** (hivemind notation): Record `network.hivemind.task.state` (record key `self`) that the coordinator keeps current in the task space: phase, matched feeds, `respondBy`, ranked options, `selectBy` and assigned agent. The requester's view of progress.
+**Task state** (hivemind notation): Record `com.hivemind-network.task.state` (record key `self`) that the coordinator keeps current in the task space: phase, matched feeds, `respondBy`, ranked options, `selectBy` and assigned agent. The requester's view of progress.
 
-**Task type** (hivemind notation): The NSID naming a kind of task and its payload lexicon, e.g. `network.hivemind.mobility.ride`. New task types (warehouse picks, charging slots) get their own lexicon under their own authority.
+**Task type** (hivemind notation): The NSID naming a kind of task and its payload lexicon, e.g. `com.hivemind-network.mobility.ride`. New task types (warehouse picks, charging slots) get their own lexicon under their own authority.
 
 **Task type module** (hivemind notation): The coordinator-side code for one task type, implementing `TaskTypeModule` (`packages/coordinator/src/task-types/`): routing points, request and offer validation, scoring features, default weights and headline. Registered in the `TaskTypeRegistry`; `ride-task-type.ts` is the first.
 

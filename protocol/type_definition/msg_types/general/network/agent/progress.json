@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.agent.progress",
+  "id": "com.hivemind-network.agent.progress",
   "defs": {
     "main": {
       "type": "record",
@@ -15,7 +15,7 @@
             "knownValues": ["accepted", "enRoute", "arrived", "inProgress", "completed", "failed"],
             "maxLength": 64
           },
-          "position": { "type": "ref", "ref": "network.hivemind.defs#geoPoint" },
+          "position": { "type": "ref", "ref": "com.hivemind-network.defs#geoPoint" },
           "eta": {
             "type": "string",
             "format": "datetime",

@@ -6,7 +6,7 @@ Hivemind is a ROS-inspired open standard plus a coordination service that lets p
 
 It shows that registration, routing into feeds, private offers, ranking, signed assignment and progress reporting can all run on atproto records and spaces, without a request ever reaching a relay or a competing operator.
 
-New to the project? Read the system overview and the component list first, then follow Process 4, one ride from request to drop-off. Every term is defined in Hivemind Glossary. This is a prototype, not production software: Spaces is itself an alpha (build of 2026-10-29), and `network.hivemind` is a placeholder namespace until a domain is registered.
+New to the project? Read the system overview and the component list first, then follow Process 4, one ride from request to drop-off. Every term is defined in Hivemind Glossary. This is a prototype, not production software: Spaces is itself an alpha (build of 2026-10-29). Lexicons use the namespace `com.hivemind-network`, from the domain hivemind-network.com.
 
 ## System at a glance
 
@@ -49,7 +49,7 @@ The system has three kinds of client software, two kinds of PDS, one coordinator
 
 | Participant | DID | Extra DID document entries |
 | --- | --- | --- |
-| Coordinator | `did:web:hivemind.network` (placeholder) | Service `#hivemind_coordinator` (its API endpoint); key `#hivemind_attestation` (signs assignments) |
+| Coordinator | `did:web:hivemind-network.com` | Service `#hivemind_coordinator` (its API endpoint); key `#hivemind_attestation` (signs assignments) |
 | Agent | did:plc on the Hivemind PDS or the operator's PDS | Service `#hivemind_agent` (its endpoint for forwarded notifyWrite calls) |
 | Rider, operator, feed owner | did:plc | None; only the standard `#atproto` key and `#atproto_pds` service |
 
@@ -57,7 +57,7 @@ The system has three kinds of client software, two kinds of PDS, one coordinator
 
 Hivemind splits its data into two layers. Who a participant is and which feeds exist is public; everything about a concrete task lives in spaces, which never reach a relay. Every record stays in its author's own repository on the author's own PDS; a space only decides who may read it and who may write into it.
 
-| Record (`network.hivemind.…`) | Layer | Written by, into | Readable by |
+| Record (`com.hivemind-network.…`) | Layer | Written by, into | Readable by |
 | --- | --- | --- | --- |
 | `agent.profile` | Public | Agent, own public repo | Everyone (firehose) |
 | `feed.declaration` | Public | Feed owner, own public repo | Everyone |
@@ -81,9 +81,9 @@ One ride touches three kinds of space: the single intake space, one feed space p
 
 | Space | How many | Policy | Who writes | Who reads | Created |
 | --- | --- | --- | --- | --- | --- |
-| Intake `…/space/network.hivemind.space.intake/main` | 1 per coordinator | Managed; managing app = coordinator | Active requesters (requests), active agents (offers) | Coordinator only | At coordinator start |
-| Feed `…/space/network.hivemind.space.feed/{rkey}.{owner}` | 1 per feed; a ride hits 1 to 4 in the demo | Managed; managing app = coordinator | Coordinator (dispatches) | Agents that are certified, paid for, subscribed, support the task type and, for private feeds, are allowlisted | When the coordinator first indexes the declaration of a registered owner |
-| Task `…/space/network.hivemind.space.task/{taskId}` | 1 per request | Member space: explicit member list | Coordinator, requester, assigned agent | Same three | When the request arrives (planned: only at assignment) |
+| Intake `…/space/com.hivemind-network.space.intake/main` | 1 per coordinator | Managed; managing app = coordinator | Active requesters (requests), active agents (offers) | Coordinator only | At coordinator start |
+| Feed `…/space/com.hivemind-network.space.feed/{rkey}.{owner}` | 1 per feed; a ride hits 1 to 4 in the demo | Managed; managing app = coordinator | Coordinator (dispatches) | Agents that are certified, paid for, subscribed, support the task type and, for private feeds, are allowlisted | When the coordinator first indexes the declaration of a registered owner |
+| Task `…/space/com.hivemind-network.space.task/{taskId}` | 1 per request | Member space: explicit member list | Coordinator, requester, assigned agent | Same three | When the request arrives (planned: only at assignment) |
 
 ### How a space works, mechanically
 
@@ -104,12 +104,12 @@ A rider needs an atproto account and a registration with the coordinator; nothin
 3. **Keys and DID.** The PDS generates the account's signing key and keeps it. It registers a new did:plc in the PLC directory; the DID document names the handle, the `#atproto` key and the Hivemind PDS as `#atproto_pds`.
 4. **Repository.** The PDS creates the rider's empty public repository with a first signed commit. The relay sees that the account exists, as for any atproto account.
 5. **Session.** The PDS returns access and refresh tokens to the app.
-6. **Service auth token.** The app asks its PDS for a service auth token (`com.atproto.server.getServiceAuth`) with `aud` = the coordinator's service and `lxm` = `network.hivemind.registry.register`.
-7. **Registration call.** The app calls `network.hivemind.registry.register` on the coordinator with `{role: requester, displayName}` and the token.
+6. **Service auth token.** The app asks its PDS for a service auth token (`com.atproto.server.getServiceAuth`) with `aud` = the coordinator's service and `lxm` = `com.hivemind-network.registry.register`.
+7. **Registration call.** The app calls `com.hivemind-network.registry.register` on the coordinator with `{role: requester, displayName}` and the token.
 8. **Verification.** The coordinator resolves the rider's DID, takes the `#atproto` key from the DID document and checks the token's signature, audience, method and expiry.
 9. **Registry entry.** The registry stores `{did, role: requester, status: active}` in the coordinator's database. Requesters pay nothing and get no public record.
 10. **Answer.** The coordinator returns `{status: active}`. From now on, `checkUserAccess` lets this DID write into the intake space.
-11. **Discovery.** Before its first request, the app calls `network.hivemind.coordinator.describe` and learns the intake space, the attestation key ID and the supported task types.
+11. **Discovery.** Before its first request, the app calls `com.hivemind-network.coordinator.describe` and learns the intake space, the attestation key ID and the supported task types.
 
 A rider who already has an atproto account elsewhere skips steps 1 to 5 and registers the existing DID; its requests are then written through its own PDS.
 
@@ -121,23 +121,23 @@ An operator registers once, then enrolls each agent; an enrolled agent publishes
 
 1. **Hosting choice.** The operator either takes accounts on the Hivemind PDS (invite code) or deploys its own Spaces-capable PDS under its own domain.
 2. **Account.** `createAccount` for the operator on the chosen PDS creates its did:plc, exactly as in Process 1.
-3. **Registration.** The org console gets a service auth token and calls `network.hivemind.registry.register` with `{role: operator, displayName}`.
+3. **Registration.** The org console gets a service auth token and calls `com.hivemind-network.registry.register` with `{role: operator, displayName}`.
 4. **Billing account.** The coordinator verifies the token, stores the operator as active and opens its billing account. Payment details go to a payment provider, off-protocol (not built yet).
 
 ### Agent account and enrollment
 
 5. **Agent account.** The operator creates an account for the vehicle (e.g. `robotaxi-1.fleet.example`) on its PDS. The DID document also gets a `#hivemind_agent` service entry pointing at the agent runtime's endpoint, which is where notifications will arrive.
-6. **Enrollment call.** The org console calls `network.hivemind.registry.enrollAgent` with `{agent: <agent DID>}`, authenticated as the operator.
+6. **Enrollment call.** The org console calls `com.hivemind-network.registry.enrollAgent` with `{agent: <agent DID>}`, authenticated as the operator.
 7. **Checks and billing.** The coordinator checks that the operator is registered and active, stores the agent with its operator, and starts the agent's flat monthly fee.
 8. **Certification.** The coordinator writes a `registry.certification` record `{subject, role: agent, operator, plan}` into its own public repo. The commit goes through the relay, so anyone can see that this agent is in good standing.
-9. **Private feeds (optional).** The owner of each private feed the agent should serve adds it with `network.hivemind.feed.putMember {feed, did, role: agent}`.
+9. **Private feeds (optional).** The owner of each private feed the agent should serve adds it with `com.hivemind-network.feed.putMember {feed, did, role: agent}`.
 
 ### Agent comes online (`HivemindAgent.start`)
 
 10. **Profile.** The agent writes `agent.profile` (record key `self`) to its public repo: display name, kind, operator DID, supported task types, capabilities (seats, pricing, maximum pickup distance) and operating area.
 11. **Subscriptions.** For every feed it wants to serve it writes a `feed.subscription` record naming the feed.
 12. **Indexing.** The relay streams both commits; the coordinator's indexer validates them against the lexicons and indexes them.
-13. **Discovery.** The agent calls `coordinator.describe` (intake space) and, per feed, `network.hivemind.feed.getFeed` (the feed's space reference).
+13. **Discovery.** The agent calls `coordinator.describe` (intake space) and, per feed, `com.hivemind-network.feed.getFeed` (the feed's space reference).
 14. **Credential request.** Per feed space, the agent gets a delegation token from its own PDS and calls `getSpaceCredential` on the space host with the key ID of a fresh key.
 15. **Access check.** The space host asks the coordinator `checkUserAccess(space, agent, read)`. The coordinator says yes only if the feed is active, the agent and its operator are active, the agent subscribes to the feed, its profile supports one of the feed's task types, and the feed is public or the agent is allowlisted.
 16. **Retry.** If the indexer has not yet seen the subscription, access is denied and the SDK retries with backoff (up to 10 attempts, 100 ms to 2 s); after that the feed is marked denied.
@@ -154,7 +154,7 @@ An interest group declares a feed in public; the coordinator backs it with a pri
 2. **Declaration.** It writes a `feed.declaration` record (record key = feed slug, e.g. `downtown`) to its public repo: display name, description, coordinator DID, coverage (`geoCircle` or `geoPolygon`), task types, access (`public` or `private`), answer window (50 ms to 10 min) and scoring settings (`default`, or `custom` weights).
 3. **Indexing.** The relay streams the commit; the coordinator's indexer validates it. A declaration naming another coordinator is ignored. One whose owner has not registered yet waits and is adopted on registration.
 4. **Feed space.** The coordinator creates the feed's managed space (`createSpace`, managing app = the coordinator's service), key `{rkey}.{owner DID suffix}`, and marks the feed active.
-5. **Private allowlists.** For a private feed the owner calls `network.hivemind.feed.putMember {feed, did, role}` for every agent that may read it (`role: agent`) and every requester that may post into it (`role: requester`). The lists live only in the coordinator's database.
+5. **Private allowlists.** For a private feed the owner calls `com.hivemind-network.feed.putMember {feed, did, role}` for every agent that may read it (`role: agent`) and every requester that may post into it (`role: requester`). The lists live only in the coordinator's database.
 6. **Agents join.** Agents subscribe and join exactly as in Process 2, steps 11 to 18.
 7. **Changing settings.** The owner rewrites the declaration under the same key, e.g. a longer answer window. The coordinator picks up the change from the firehose; it applies to requests that arrive afterwards.
 8. **Removing access.** `feed.removeMember` takes a DID off an allowlist; new credentials and notifications are refused at once, credentials already issued expire within about 10 minutes. Deleting the declaration deactivates the feed: no more routing, no more reads.
@@ -168,7 +168,7 @@ This is the core of the protocol: 40 steps from the rider's tap to the rider lea
 ### A. The rider asks
 
 1. **Input.** The rider sets pickup and destination, picks *Pick the best for me* (`auto`) or *Let me choose* (`choose`), and may cap the wait (`maxWaitMs`).
-2. **Request record.** The app writes `task.request` through its PDS: `com.atproto.space.createRecord` into the intake space, record key a fresh TID, value `{taskType: network.hivemind.mobility.ride, payload: {pickup, dropoff, passengerCount}, selectionMode, maxWaitMs}`.
+2. **Request record.** The app writes `task.request` through its PDS: `com.atproto.space.createRecord` into the intake space, record key a fresh TID, value `{taskType: com.hivemind-network.mobility.ride, payload: {pickup, dropoff, passengerCount}, selectionMode, maxWaitMs}`.
 3. **Task identity.** The app derives the task ID `{rkey}-{DID suffix}` and the task space address from it, and starts watching that space. Until the coordinator adds the rider, reads are refused and retried; the prototype app polls every 400 ms.
 4. **Write notice.** The rider's PDS, as repo host, calls `notifyWrite` for the intake space on the space host (here the same PDS).
 5. **Write check.** The space host asks the coordinator `checkUserAccess(intake, rider, write)`; an active requester passes. The host stamps the next `spaceRev` and forwards the notice to the coordinator's registered endpoint.
@@ -330,7 +330,7 @@ Moving off the simulation means swapping four interface implementations, not rew
 | --- | --- | --- |
 | `XrpcTransport`, `XrpcServerHost` | In-memory `SimXrpcNetwork` with a configurable delay per hop | HTTP: `fetch` for calls, a small HTTP server or `@atproto/xrpc-server` for the coordinator and agent endpoints |
 | `IdentityResolver` | `SimIdentityDirectory` (did:plc and did:web) | PLC directory (local or public) and `did.json` over HTTPS; handles via DNS or `.well-known` |
-| `FirehoseSource` | `SimRelay` | Relay `subscribeRepos`, Jetstream or Tap, filtered to `network.hivemind.*` |
+| `FirehoseSource` | `SimRelay` | Relay `subscribeRepos`, Jetstream or Tap, filtered to `com.hivemind-network.*` |
 | Spaces client under `SpaceReader` | Simulated alpha semantics, JWS request proofs | The alpha SDK's space client: RFC 9421 request signatures and MAC checks |
 
 ### Deployment layout
@@ -342,7 +342,7 @@ Moving off the simulation means swapping four interface implementations, not rew
 | Coordinator database | JSON-file mock first, then Postgres | Holds what only Hivemind needs: registry, billing, allowlists, task state, indexes. Records others must see or verify stay in atproto |
 | Matching service | Optional separate service, e.g. Java or Kotlin with Timefold or OR-Tools, behind `MatchingEngine` | Worth it once optimisation goes beyond ranking one task's offers (fleet-wide assignment, batching); the protocol code stays in TypeScript |
 | Operator PDS | Same PDS image, run by the operator | Optional; agents can stay on the Hivemind PDS |
-| Lexicons | Published under a registered domain | Rename `network.hivemind`, publish schemas with `goat` or the `lex` tool |
+| Lexicons | Published under a registered domain | Rename `com.hivemind-network`, publish schemas with `goat` or the `lex` tool |
 
 ### Steps to run on the Spaces alpha
 
@@ -396,7 +396,7 @@ Seven decisions were taken before the first line of code; the review of the prot
 | Private channel for requests and offers | atproto Spaces, since the alpha needs no paid services; an own channel concept only as fallback |
 | Infrastructure | Local simulation first, then the move to real atproto infrastructure |
 | Relation to ROS | Inspiration only, no ROS interfacing. Stack: TypeScript, React, Leaflet; avoid bloat |
-| Namespace | `network.hivemind` until a domain is registered |
+| Namespace | `com.hivemind-network` until a domain is registered |
 | Feeds | Private feeds restrict both who sees and who posts. Default scoring with owner-customisable weights. Answer time adjustable per feed, for networks spanning the globe |
 | Business model | Users free; flat monthly fee per agent plus a very small per-request fee for high-frequency use; the matching algorithm is hosted only by Hivemind, never by companies |
 | Demo and scope | Taxi in San Diego first, structured for more scenarios; straight-line driving is fine. Customer-to-agent only; agent-to-agent later |
@@ -437,7 +437,7 @@ Twelve points are still undecided; the first five block the privacy fixes and th
 - [ ] **Offers space per feed:** its policy, and how the coordinator correlates offers across feeds.
 - [ ] **Retention and GDPR:** how long task spaces live, Hivemind's processor role, and whether payloads get HPKE encryption.
 - [ ] **Billing:** payment provider, and what happens to the monthly fee during a suspension.
-- [ ] **Domain:** which domain replaces `network.hivemind` for the published lexicons.
+- [ ] **Domain:** which domain replaces `com.hivemind-network` for the published lexicons.
 - [ ] **Next scope:** the warehouse scenario and agent-to-agent communication.
 
 ## Where things are
@@ -449,7 +449,7 @@ The prototype lives in the `at-protocol-hivemind-demo` repository; `npm run demo
 | `packages/atproto-core` | atproto primitives: keys, DIDs, JWTs, service auth, space credentials, TIDs, AT-URIs, the XRPC, identity and firehose interfaces, trace |
 | `packages/atproto-sim` | The simulated network: DID directory, PDS (public repos, Spaces repo host and authority), relay, XRPC transport |
 | `packages/atproto-client` | Account sessions, `SpaceReader`, `SpaceSyncer`, notification receiver |
-| `packages/protocol` | The open standard: `network.hivemind` lexicons, types, validation, geo helpers, task identity, assignment signing |
+| `packages/protocol` | The open standard: `com.hivemind-network` lexicons, types, validation, geo helpers, task identity, assignment signing |
 | `packages/coordinator` | The Hivemind service: indexer, registry and billing, feeds, routing, ranking, task manager, API |
 | `packages/sdk` | `HivemindAgent`, `HivemindRequester`, `HivemindOrganization` |
 | `apps/demo-server` | Boots network and scenario; streams snapshots and trace over WebSocket; taxi scenario |

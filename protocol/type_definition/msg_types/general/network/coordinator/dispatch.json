@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.coordinator.dispatch",
+  "id": "com.hivemind-network.coordinator.dispatch",
   "defs": {
     "main": {
       "type": "record",
@@ -10,7 +10,7 @@
         "type": "object",
         "required": ["taskId", "payload", "respondBy", "createdAt"],
         "properties": {
-          "taskId": { "type": "ref", "ref": "network.hivemind.defs#taskId" },
+          "taskId": { "type": "ref", "ref": "com.hivemind-network.defs#taskId" },
           "payload": {
             "type": "union",
             "refs": [],

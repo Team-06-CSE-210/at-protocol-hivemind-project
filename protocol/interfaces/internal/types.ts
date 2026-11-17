@@ -6,42 +6,43 @@
  * rebuild, and these follow.
  */
 import type { l } from '@atproto/lex'
-import type { internal, network } from '../../generated/index.js'
+import type { internal } from '../../generated/index.js'
+import type * as hivemind from '../../generated/com/hivemind-network.js'
 
 // Identifiers and addresses
 export type Did = l.DidString
 export type AtUri = l.AtUriString
 export type Nsid = l.NsidString
 export type Datetime = l.DatetimeString
-export type TaskId = network.hivemind.defs.TaskId
+export type TaskId = hivemind.defs.TaskId
 /** Space address: at://{authority DID}/space/{space type NSID}/{space key}. */
 export type SpaceRef = `at://${string}/space/${string}/${string}`
 /** Any record or payload, identified by its $type. Payload slots in the general records have this type. */
 export type TypedObject = l.Unknown$TypedObject
 
-// Shared types (network.hivemind.defs)
-export type GeoPoint = network.hivemind.defs.GeoPoint
-export type GeoCircle = network.hivemind.defs.GeoCircle
-export type GeoPolygon = network.hivemind.defs.GeoPolygon
-export type Money = network.hivemind.defs.Money
-export type Attestation = network.hivemind.defs.Attestation
+// Shared types (com.hivemind-network.defs)
+export type GeoPoint = hivemind.defs.GeoPoint
+export type GeoCircle = hivemind.defs.GeoCircle
+export type GeoPolygon = hivemind.defs.GeoPolygon
+export type Money = hivemind.defs.Money
+export type Attestation = hivemind.defs.Attestation
 
 // General records
-export type RequesterRequest = network.hivemind.requester.request.Main
-export type RequesterSelection = network.hivemind.requester.selection.Main
-export type AgentProfile = network.hivemind.agent.profile.Main
-export type AgentOffer = network.hivemind.agent.offer.Main
-export type AgentSnapshot = network.hivemind.agent.offer.AgentSnapshot
-export type AgentProgress = network.hivemind.agent.progress.Main
-export type Dispatch = network.hivemind.coordinator.dispatch.Main
-export type TaskState = network.hivemind.coordinator.taskState.Main
-export type OfferOption = network.hivemind.coordinator.taskState.OfferOption
-export type Assignment = network.hivemind.coordinator.assignment.Main
-export type FeedDeclaration = network.hivemind.feed.declaration.Main
+export type RequesterRequest = hivemind.requester.request.Main
+export type RequesterSelection = hivemind.requester.selection.Main
+export type AgentProfile = hivemind.agent.profile.Main
+export type AgentOffer = hivemind.agent.offer.Main
+export type AgentSnapshot = hivemind.agent.offer.AgentSnapshot
+export type AgentProgress = hivemind.agent.progress.Main
+export type Dispatch = hivemind.coordinator.dispatch.Main
+export type TaskState = hivemind.coordinator.taskState.Main
+export type OfferOption = hivemind.coordinator.taskState.OfferOption
+export type Assignment = hivemind.coordinator.assignment.Main
+export type FeedDeclaration = hivemind.feed.declaration.Main
 
 // Coordinator types
-export type Registration = network.hivemind.coordinator.defs.Registration
-export type FeedMember = network.hivemind.coordinator.defs.FeedMember
+export type Registration = hivemind.coordinator.defs.Registration
+export type FeedMember = hivemind.coordinator.defs.FeedMember
 export type ScoringCriterion = internal.hivemind.coordinator.defs.ScoringCriterion
 export type FeatureValue = internal.hivemind.coordinator.defs.FeatureValue
 export type RankCandidate = internal.hivemind.coordinator.defs.RankCandidate

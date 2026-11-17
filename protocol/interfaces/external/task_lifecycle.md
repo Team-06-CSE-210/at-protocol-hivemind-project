@@ -2,7 +2,7 @@
 
 The task lifecycle is Hivemind's action interface (the ROS `.action` analogue): the request is the goal, the assignment is the accepted goal, `agent.progress` records are the feedback, and `completed` or `failed` is the result. There is no method for it. The lifecycle runs entirely on records written into spaces, and this file is its definition.
 
-Record names below drop the `network.hivemind.` prefix.
+Record names below drop the `com.hivemind-network.` prefix.
 
 ## Phases
 

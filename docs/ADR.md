@@ -31,3 +31,25 @@ Upgrade once, deliberately, ideally to the first stable release:
 1. Replace the version string in `package.json` (dependencies, devDependencies, overrides) and check whether the new snapshot pulls in `@atproto` packages that need an override.
 2. Run `npm install`, then `npm run typecheck`.
 3. Adapt the `AtprotoGateway` implementation. Nothing outside it should depend on alpha details.
+
+## ADR-002: Lexicon namespace com.hivemind-network
+
+Date: 2026-11-16. Status: accepted.
+
+### Context
+
+An NSID is a reversed domain plus a name, and the domain decides who may publish the lexicon: resolvers look up a DNS TXT record `_lexicon.<authority domain>` (the NSID without its last segment, reversed). Our lexicons used `network.hivemind.*`, i.e. the domain hivemind.network, which Hivemind does not own. Hivemind has registered hivemind-network.com.
+
+### Decision
+
+- Every lexicon of the open protocol (general records, shared defs, space types, coordinator methods, task types) uses `com.hivemind-network.*`, e.g. `com.hivemind-network.mobility.ride`.
+- Internal-only lexicons keep `internal.hivemind.*`. The top-level `internal` root belongs to no domain and is never published; Bluesky does the same (`internal.bsky.*`).
+- The coordinator's identity is planned as `did:web:hivemind-network.com`.
+- TypeScript imports the generated namespace as `import * as hivemind from ".../generated/com/hivemind-network.js"`, because the hyphen rules out `com.hivemind-network` as a property path.
+- Lexicon folders keep their paths; `npm run lex:build` places files by their `id`.
+
+### Consequences
+
+- To publish a lexicon group, add a TXT record such as `_lexicon.mobility.hivemind-network.com` with `did=<DID>` and put the schemas as `com.atproto.lexicon.schema` records (record key = NSID) into that DID's repo.
+- `did:web:hivemind-network.com` requires serving `https://hivemind-network.com/.well-known/did.json`. Losing the domain would mean losing both the coordinator's identity and the lexicon authority.
+- Nothing had been released, so no records under the old namespace need migrating.

@@ -3,6 +3,7 @@
 		"target": "ES2022",
 		"module": "NodeNext",
 		"strict": true,
+		"skipLibCheck": true,
 		"types": ["node"],
 		"rootDir": ".",
 		"outDir": "dist"
@@ -10,6 +11,8 @@
 	"include": [
 		"protocol/**/*.ts",
 		"services/**/*.ts",
+		"hivemind_library/**/*.ts",
+		"demo/**/*.ts",
 		"scripts/**/*.ts",
 		"tests/**/*.ts"
 	]

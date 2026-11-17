@@ -1,6 +1,6 @@
 {
   "lexicon": 1,
-  "id": "network.hivemind.space.task",
+  "id": "com.hivemind-network.space.task",
   "description": "Space type of one task, keyed by its task ID. The requester is a member from the start; the winning agent is added at assignment. Access rules: type_definition/policy_types/task.json.",
   "defs": {
     "main": {
@@ -9,10 +9,10 @@
       "name": "Hivemind task",
       "description": "State, selection, assignment and progress of one task.",
       "collections": [
-        "network.hivemind.requester.selection",
-        "network.hivemind.agent.progress",
-        "network.hivemind.coordinator.taskState",
-        "network.hivemind.coordinator.assignment"
+        "com.hivemind-network.requester.selection",
+        "com.hivemind-network.agent.progress",
+        "com.hivemind-network.coordinator.taskState",
+        "com.hivemind-network.coordinator.assignment"
       ]
     }
   }
