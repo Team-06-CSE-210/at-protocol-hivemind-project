@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { TaskTypeModule } from "../../protocol/interfaces/internal/task_type_module.js";
+import type { TaskTypeModule } from "../../core/protocol/interfaces/internal/task_type_module.js";
 import type {
 	GeoPoint,
 	TypedObject,
-} from "../../protocol/interfaces/internal/types.js";
+} from "../../core/protocol/interfaces/internal/types.js";
 import {
 	moduleForPayload,
 	taskTypeOf,
-} from "../../protocol/type_definition/task_types/task_index.js";
+} from "../../core/protocol/type_definition/task_types/task_index.js";
 
 // What every task type module must do, so the coordinator can treat all applications alike.
 // Each application's test (e.g. autonomous_taxi/taxi_ride.test.ts) runs it with its own fixtures.

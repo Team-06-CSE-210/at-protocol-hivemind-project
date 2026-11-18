@@ -1,10 +1,13 @@
 # Communication
 
-The two implementations of `AtprotoGateway` and `SpaceAuthority` (`interfaces/internal/atproto_gateway.ts`). Everything above them (coordinator, client library, demo) only sees the interface and does not know which one it got.
+The two implementations of `AtprotoGateway` and `SpaceAuthority` (`interfaces/internal/atproto_gateway.ts`). Everything above them (coordinator, SDK, demo) only sees the interface and does not know which one it got.
+
+- `network/`: talks to real atproto infrastructure (PDS, PLC directory, firehose).
+- `in_memory/`: simulates that infrastructure inside one process.
 
 | File | What it is | Used for |
 | --- | --- | --- |
-| `at_gateway_pds.ts` | `PdsGateway`, `PdsSpaceAuthority`: real PDS, PLC directory and firehose on the Spaces alpha pinned in `package.json` | the demo on a real network, `tests/gateway/pds_gateway.test.ts` (in-process PDS from `@atproto/dev-env`) |
+| `network/at_gateway_pds.ts` | `PdsGateway`, `PdsSpaceAuthority`: real PDS, PLC directory and firehose on the Spaces alpha pinned in `package.json` | the demo on a real network, `tests/gateway/pds_gateway.test.ts` (in-process PDS from `@atproto/dev-env`) |
 | `in_memory/at_protocol_network.ts` | `AtProtocolNetwork`: every PDS, the space hosts and the firehose in one object | unit tests, quick local runs |
 | `in_memory/at_gateway_localsim.ts` | `LocalSimGateway`, `LocalSimSpaceAuthority`: one per account, all on one `AtProtocolNetwork` | same |
 

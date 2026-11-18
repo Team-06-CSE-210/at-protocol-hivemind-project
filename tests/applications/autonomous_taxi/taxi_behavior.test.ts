@@ -8,7 +8,7 @@ import {
 	type TaxiFleetConfig,
 	type TaxiSimulationOptions,
 } from "../../../demo/autonomous_taxi/simulation/taxi_behavior.js";
-import type { OfferAnswer } from "../../../protocol/interfaces/internal/client_lib.js";
+import type { OfferAnswer } from "../../../core/protocol/interfaces/internal/client_lib.js";
 import type {
 	AgentProgress,
 	Assignment,
@@ -16,8 +16,8 @@ import type {
 	Draft,
 	GeoPoint,
 	TypedObject,
-} from "../../../protocol/interfaces/internal/types.js";
-import { rideTaskType } from "../../../protocol/type_definition/task_types/taxi_ride.js";
+} from "../../../core/protocol/interfaces/internal/types.js";
+import { rideTaskType } from "../../../core/protocol/type_definition/task_types/taxi_ride.js";
 
 // The demo taxi on its own: no network, no coordinator, simulated time that does not wait.
 

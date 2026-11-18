@@ -11,7 +11,7 @@ export interface AttestationSigner {
   sign(assignment: Omit<Assignment, 'attestation'>): Promise<Attestation>
 }
 
-/** Owner: client library. An agent acts only if this returns true. */
+/** Owner: SDK (hivemind_sdk/). An agent acts only if this returns true. */
 export interface AttestationVerifier {
   /** True if the attestation verifies against the key of one of the trusted coordinators. */
   verify(assignment: Assignment, trustedCoordinators: Did[]): Promise<boolean>

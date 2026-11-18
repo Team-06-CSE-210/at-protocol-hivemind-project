@@ -8,7 +8,7 @@ import type { AtUri, Did, Nsid, SpaceRef, TypedObject } from "./types.js";
 // The only way our Hivemind Application direclty interfaces with atproto
 
 // Contains TWO main implementations: one for real atproto PDSes and one in-memory variant for local tests
-// Used by: the coordinator and the client library (one gateway instance per account)
+// Used by: the coordinator and the SDK in hivemind_sdk/ (one gateway instance per account)
 
 // Hides login sessions, service authentication, space credentials (bound to P-256 key, with every request signed)
 // MAC checks on synced space data, notification registration and catch-up

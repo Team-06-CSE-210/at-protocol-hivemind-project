@@ -21,16 +21,16 @@ import {
 	SpaceAccessDeniedError,
 	type SpaceAuthority,
 	type SpacePolicy,
-} from "../interfaces/internal/atproto_gateway.js";
-import type { RevisionStore } from "../interfaces/internal/stores.js";
+} from "../../interfaces/internal/atproto_gateway.js";
+import type { RevisionStore } from "../../interfaces/internal/stores.js";
 import type {
 	AtUri,
 	Did,
 	Nsid,
 	SpaceRef,
 	TypedObject,
-} from "../interfaces/internal/types.js";
-import { authorityOf } from "../protocol_config/space_definition.js";
+} from "../../interfaces/internal/types.js";
+import { authorityOf } from "../../protocol_config/space_definition.js";
 
 // Real gateway: talks to PDSes running the Spaces alpha pinned in package.json
 // (0.0.0-spaces-alpha-20261105160032). One instance per account.

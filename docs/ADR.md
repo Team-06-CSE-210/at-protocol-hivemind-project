@@ -53,3 +53,26 @@ An NSID is a reversed domain plus a name, and the domain decides who may publish
 - To publish a lexicon group, add a TXT record such as `_lexicon.mobility.hivemind-network.com` with `did=<DID>` and put the schemas as `com.atproto.lexicon.schema` records (record key = NSID) into that DID's repo.
 - `did:web:hivemind-network.com` requires serving `https://hivemind-network.com/.well-known/did.json`. Losing the domain would mean losing both the coordinator's identity and the lexicon authority.
 - Nothing had been released, so no records under the old namespace need migrating.
+
+## ADR-003: Repository layout with core, services and hivemind_sdk
+
+Date: 2026-11-18. Status: accepted.
+
+### Context
+
+`protocol/` held the message types, interfaces and gateways at the top level, while the coordinator sat among the running services in `services/`. There was no single place that says: this is what every service builds on.
+
+### Decision
+
+- `core/` holds what the services build on: immutable type definitions, functions and configuration files, and every interface the services need to operate. It has two folders:
+  - `core/protocol/` (was `protocol/`). Its `communication/` folder is split into `network/` (real atproto: `at_gateway_pds.ts`) and `in_memory/` (simulation).
+  - `core/coordinator/` (was `services/coordinator/`).
+- `services/` keeps the services that run on top of `core/` (`hivemind_pds/`, `matching_service/`).
+- `hivemind_library/` is renamed `hivemind_sdk/`.
+
+### Consequences
+
+- Imports point toward `core/`: `services/`, `hivemind_sdk/`, `demo/`, `scripts/` and `tests/` import from it, and `core/` imports from none of them.
+- Generated lexicon code moves to `core/protocol/generated/` (ignored by git). `tsconfig.json` and `biome.json` include `core/**` and `hivemind_sdk/**` instead of `protocol/**` and `hivemind_library/**`.
+- Tests read the space policies from `core/protocol/type_definition/policy_types/`.
+

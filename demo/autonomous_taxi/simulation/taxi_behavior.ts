@@ -1,23 +1,23 @@
 import { l } from "@atproto/lex";
-import * as hivemind from "../../../protocol/generated/com/hivemind-network.js";
+import * as hivemind from "../../../core/protocol/generated/com/hivemind-network.js";
 import type {
 	AgentBehavior,
 	OfferAnswer,
 	ProgressReporter,
-} from "../../../protocol/interfaces/internal/client_lib.js";
+} from "../../../core/protocol/interfaces/internal/client_lib.js";
 import type {
 	AgentSnapshot,
 	Assignment,
 	Dispatch,
 	GeoPoint,
-} from "../../../protocol/interfaces/internal/types.js";
+} from "../../../core/protocol/interfaces/internal/types.js";
 
 // How a simulated robotaxi answers dispatches and carries out rides. The agent client
-// (hivemind_library/hivemind_agent.ts) calls it; it never talks to atproto itself.
+// (hivemind_sdk/hivemind_agent.ts) calls it; it never talks to atproto itself.
 // Numbers come from demo/autonomous_taxi/config/taxi_fleet.json.
 //
 // Payloads are checked with the ride lexicon only. The ride task type module
-// (protocol/type_definition/task_types/taxi_ride.ts) is the coordinator's half; its extra
+// (core/protocol/type_definition/task_types/taxi_ride.ts) is the coordinator's half; its extra
 // rules would reject a short ride whose pickup and dropoff were rounded onto the same point
 // in a dispatch.
 const ride = hivemind.mobility.ride;

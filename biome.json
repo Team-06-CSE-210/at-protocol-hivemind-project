@@ -7,9 +7,9 @@
 	},
 	"files": {
 		"includes": [
-			"protocol/**/*.ts",
+			"core/**/*.ts",
 			"services/**/*.ts",
-			"hivemind_library/**/*.ts",
+			"hivemind_sdk/**/*.ts",
 			"demo/**/*.ts",
 			"scripts/**/*.ts",
 			"tests/**/*.ts",
