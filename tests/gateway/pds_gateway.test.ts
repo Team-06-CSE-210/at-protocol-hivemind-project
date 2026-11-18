@@ -4,7 +4,7 @@ import { IdResolver } from "@atproto/identity";
 import {
 	PdsGateway,
 	PdsSpaceAuthority,
-} from "../../protocol/communication/at_gateway_pds.js";
+} from "../../core/protocol/communication/network/at_gateway_pds.js";
 import { runGatewayContract } from "./gateway_contract.js";
 
 // The same contract against a real PDS and PLC directory, started in this process by

@@ -16,7 +16,7 @@ import type {
 } from './types.js'
 
 /*
- * Storage of the coordinator (services/data_handling). Implemented with a JSON file for the
+ * Storage of the coordinator (services/hivemind_pds/data_handling). Implemented with a JSON file for the
  * prototype and a database later. The stored shapes are compositions of protocol messages and
  * add no message types of their own.
  */

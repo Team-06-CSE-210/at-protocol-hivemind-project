@@ -2,7 +2,7 @@
  * Readable names for the message types every internal interface uses.
  *
  * Nothing is defined here: each type comes from the lexicons in type_definition/msg_types and
- * interfaces/external, generated into protocol/generated/ by `lex build`. Change the lexicon,
+ * interfaces/external, generated into core/protocol/generated/ by `lex build`. Change the lexicon,
  * rebuild, and these follow.
  */
 import type { l } from '@atproto/lex'
@@ -48,5 +48,5 @@ export type FeatureValue = internal.hivemind.coordinator.defs.FeatureValue
 export type RankCandidate = internal.hivemind.coordinator.defs.RankCandidate
 export type RankedOption = internal.hivemind.coordinator.defs.RankedOption
 
-/** A record as the caller fills it in: the library adds $type and createdAt. */
+/** A record as the caller fills it in: the SDK adds $type and createdAt. */
 export type Draft<RecordType> = Omit<RecordType, '$type' | 'createdAt'>

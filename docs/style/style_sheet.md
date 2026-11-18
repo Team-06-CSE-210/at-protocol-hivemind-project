@@ -9,6 +9,7 @@ The rule behind everything: **a reader should understand what a piece of code do
 - **snake_case for every file and folder:** `at_gateway_pds.ts`, `space_definition.ts`, `taxi_behavior.ts`.
 - **Names say what the file holds.** No `index.ts`, `utils.ts` or `helpers.ts`; a registry is `task_index.ts`, a module for rides in the taxi demo is `taxi_ride.ts`.
 - **One overview doc per folder, named `_<folder>.md`** (`_communication.md`, `_interfaces.md`, `_task_types.md`). The underscore sorts it first. It says what each file is, who uses it and where it is implemented, usually as a table.
+- **Dependencies point toward `core/`.** `core/` holds definitions, functions, configuration and interfaces; `services/`, `hivemind_sdk/`, `demo/` and `tests/` import from it, and `core/` imports from none of them (ADR-003).
 - **General before specific.** Shared parts live in `general/`; application parts in `applications/<application>/` (e.g. `applications/autonomous_taxi/`).
 - **Tests mirror what they test:** `tests/gateway/`, `tests/applications/<application>/`. A test file is named after its module: `taxi_ride.ts` → `taxi_ride.test.ts`. Tests shared by several implementations are `*_contract.ts` or `*_conformance.ts` and are run by each implementation's test file.
 
@@ -121,7 +122,7 @@ Titles are a few words naming what follows ("Space Interaction", "Credentials an
 
 ## 6. Interfaces
 
-- **Every interface is defined in `protocol/interfaces/`**, even internal ones: `external/` for what other participants call, `internal/` for what our own components share.
+- **Every interface is defined in `core/protocol/interfaces/`**, even internal ones: `external/` for what other participants call, `internal/` for what our own components share.
 - **Small and non-bloated:** only the methods callers need. An interface hides its machinery; the gateway hides credentials, signatures, MACs and polling behind `watchSpace`.
 - **Interfaces to the outside world get a real and an in-memory implementation**, plus one contract test that both pass (`AtprotoGateway` is the model: `tests/gateway/gateway_contract.ts`).
 - The interface's comments say what callers can rely on, including surprises (ordering per writer, invisible writes without access).

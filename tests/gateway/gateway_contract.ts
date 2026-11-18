@@ -3,23 +3,23 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { after, before, describe, test } from "node:test";
 import { l } from "@atproto/lex";
-import * as hivemind from "../../protocol/generated/com/hivemind-network.js";
+import * as hivemind from "../../core/protocol/generated/com/hivemind-network.js";
 import {
 	type AtprotoGateway,
 	type RecordChange,
 	SpaceAccessDeniedError,
 	type SpaceAuthority,
 	type SpacePolicy,
-} from "../../protocol/interfaces/internal/atproto_gateway.js";
+} from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type {
 	SpaceRef,
 	TypedObject,
-} from "../../protocol/interfaces/internal/types.js";
+} from "../../core/protocol/interfaces/internal/types.js";
 import {
 	createTaskId,
 	SPACE_TYPES,
 	taskSpaceRef,
-} from "../../protocol/protocol_config/space_definition.js";
+} from "../../core/protocol/protocol_config/space_definition.js";
 
 // What every AtprotoGateway must do, whatever is behind it. in_memory_gateway.test.ts and
 // pds_gateway.test.ts run these same tests, so both implementations behave alike.
@@ -303,14 +303,18 @@ export function runGatewayContract(
 // Helpers
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-// The policy object of a file in protocol/type_definition/policy_types, for one coordinator.
+// The policy object of a file in core/protocol/type_definition/policy_types, for one coordinator.
 // Tests run from the project root (npm test), so paths are relative to it.
 export async function loadPolicy(
 	fileName: string,
 	coordinatorDid: string,
 ): Promise<SpacePolicy> {
 	const text = await readFile(
-		path.join(process.cwd(), "protocol/type_definition/policy_types", fileName),
+		path.join(
+			process.cwd(),
+			"core/protocol/type_definition/policy_types",
+			fileName,
+		),
 		"utf8",
 	);
 	const { policy } = JSON.parse(

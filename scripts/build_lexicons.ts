@@ -4,7 +4,7 @@
  * The lexicons live in several folders (general message types, one folder per
  * application, external interfaces) whose paths do not mirror the NSIDs. This
  * script collects them, places each one at the path its `id` implies, and runs
- * `lex build` on that merged tree. Output: protocol/generated/ (not committed).
+ * `lex build` on that merged tree. Output: core/protocol/generated/ (not committed).
  *
  * Run with: npm run lex:build
  */
@@ -22,7 +22,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 
-const protocolDir = join(import.meta.dirname, "..", "protocol");
+const protocolDir = join(import.meta.dirname, "..", "core", "protocol");
 const outputDir = join(protocolDir, "generated");
 const applicationsDir = join(
 	protocolDir,

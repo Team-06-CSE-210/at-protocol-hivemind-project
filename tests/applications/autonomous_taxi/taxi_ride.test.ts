@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
-import type { TypedObject } from "../../../protocol/interfaces/internal/types.js";
-import { rideTaskType } from "../../../protocol/type_definition/task_types/taxi_ride.js";
+import type { TypedObject } from "../../../core/protocol/interfaces/internal/types.js";
+import { rideTaskType } from "../../../core/protocol/type_definition/task_types/taxi_ride.js";
 import { runTaskTypeConformance } from "../task_type_conformance.js";
 
 // Fixtures in San Diego: downtown to Little Italy, about 1.3 km

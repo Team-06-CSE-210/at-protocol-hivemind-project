@@ -17,14 +17,14 @@ import type {
 } from './types.js'
 
 /*
- * The client library: how requesters, agents and organizations take part without handling
+ * The SDK (hivemind_sdk/): how requesters, agents and organizations take part without handling
  * spaces, credentials or signatures themselves. Used by demo/ (simulated taxis), view/ (rider
  * app) and, later, outside operators.
  */
 
 // Agent side
 
-/** What an operator implements to run an agent. The client library does everything else. */
+/** What an operator implements to run an agent. The SDK does everything else. */
 export interface AgentBehavior {
   /** Decide on a dispatch before its respondBy. Called once per dispatch the agent can read. */
   onDispatch(dispatch: Dispatch): Promise<OfferAnswer>

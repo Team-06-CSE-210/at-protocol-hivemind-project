@@ -3,17 +3,17 @@ import { describe, test } from "node:test";
 import {
 	LocalSimGateway,
 	LocalSimSpaceAuthority,
-} from "../../protocol/communication/in_memory/at_gateway_localsim.js";
-import { AtProtocolNetwork } from "../../protocol/communication/in_memory/at_protocol_network.js";
-import { SpaceAccessDeniedError } from "../../protocol/interfaces/internal/atproto_gateway.js";
+} from "../../core/protocol/communication/in_memory/at_gateway_localsim.js";
+import { AtProtocolNetwork } from "../../core/protocol/communication/in_memory/at_protocol_network.js";
+import { SpaceAccessDeniedError } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type {
 	Did,
 	TypedObject,
-} from "../../protocol/interfaces/internal/types.js";
+} from "../../core/protocol/interfaces/internal/types.js";
 import {
 	intakeSpaceRef,
 	SPACE_TYPES,
-} from "../../protocol/protocol_config/space_definition.js";
+} from "../../core/protocol/protocol_config/space_definition.js";
 import {
 	eventually,
 	type GatewayWorld,
