@@ -288,9 +288,9 @@ export function runGatewayContract(
 
 		test("managed spaces have no member list", async () => {
 			const space = await authority.createSpace(
-				SPACE_TYPES.intake,
+				SPACE_TYPES.requestIntake,
 				`test${Date.now()}`,
-				await loadPolicy("intake.json", coordinator.did),
+				await loadPolicy("request_intake.json", coordinator.did),
 			);
 			await assert.rejects(
 				authority.putMember(space, rider.did, { read: true, write: true }),

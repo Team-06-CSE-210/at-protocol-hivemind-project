@@ -64,7 +64,7 @@ export interface RequesterClientOptions {
 
 export interface RequesterClient {
   register(): Promise<Registration>
-  /** Choose a fresh task ID, write the request into the intake space and follow the task space. */
+  /** Choose a fresh task ID, write the request into the request intake space and follow the task space. */
   request(payload: TypedObject, options?: { selectionMode?: 'auto' | 'choose'; maxWaitMs?: number }): Promise<TaskHandle>
 }
 

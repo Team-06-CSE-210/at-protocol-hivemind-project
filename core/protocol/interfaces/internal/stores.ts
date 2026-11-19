@@ -16,9 +16,9 @@ import type {
 } from './types.js'
 
 /*
- * Storage of the coordinator (services/hivemind_pds/data_handling). Implemented with a JSON file for the
- * prototype and a database later. The stored shapes are compositions of protocol messages and
- * add no message types of their own.
+ * Storage of the coordinator. Implemented in core/coordinator/data/: SQLite for running, in memory
+ * for tests. The stored shapes are compositions of protocol messages and add no message types of
+ * their own.
  */
 
 /** Registered participants: requesters, operators and agents. */
@@ -40,7 +40,7 @@ export interface FeedMemberStore {
 export interface TaskRecord {
   taskId: TaskId
   requester: Did
-  /** Record key of the request in the requester's intake repo. */
+  /** Record key of the request in the requester's repo inside the request intake space. */
   requestRkey: string
   request: RequesterRequest
   matchedFeeds: AtUri[]
@@ -87,4 +87,21 @@ export interface PublicRecordIndex {
 export interface RevisionStore {
   get(space: SpaceRef, writer: Did): Promise<string | undefined>
   set(space: SpaceRef, writer: Did, revision: string): Promise<void>
+}
+
+/** Assignments per agent and month, for the included quota and the fee above it (table billing_usage). */
+export interface BillingStore {
+  /** Count one more assignment for the agent in the month (YYYY-MM); returns the new count. */
+  addAssignment(agent: Did, month: string): Promise<number>
+  countAssignments(agent: Did, month: string): Promise<number>
+}
+
+/** Every store the coordinator uses, as one object for wiring. */
+export interface CoordinatorStores {
+  participants: ParticipantStore
+  feedMembers: FeedMemberStore
+  tasks: TaskStore
+  publicIndex: PublicRecordIndex
+  revisions: RevisionStore
+  billing: BillingStore
 }

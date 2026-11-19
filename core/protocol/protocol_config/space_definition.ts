@@ -16,12 +16,14 @@ import type {
 
 // NSIDs of the space-type lexicons in type_definition/msg_types/general/network/space/
 export const SPACE_TYPES = {
-	intake: "com.hivemind-network.space.intake",
+	requestIntake: "com.hivemind-network.space.requestIntake",
+	offerIntake: "com.hivemind-network.space.offerIntake",
 	feed: "com.hivemind-network.space.feed",
 	task: "com.hivemind-network.space.task",
 } as const satisfies Record<string, Nsid>;
 
-// The coordinator has exactly one intake space; its key is fixed (see policy_types/intake.json)
+// The coordinator has exactly one request intake and one offer intake; both use this key
+// (see policy_types/request_intake.json and offer_intake.json)
 export const INTAKE_SPACE_KEY = "main";
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -66,8 +68,18 @@ export function authorityOf(space: SpaceRef): Did {
 // Hivemind spaces
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-export function intakeSpaceRef(coordinator: Did): SpaceRef {
-	return formatSpaceRef(coordinator, SPACE_TYPES.intake, INTAKE_SPACE_KEY);
+// Requesters write their requests here
+export function requestIntakeSpaceRef(coordinator: Did): SpaceRef {
+	return formatSpaceRef(
+		coordinator,
+		SPACE_TYPES.requestIntake,
+		INTAKE_SPACE_KEY,
+	);
+}
+
+// Agents write their offers and declines here
+export function offerIntakeSpaceRef(coordinator: Did): SpaceRef {
+	return formatSpaceRef(coordinator, SPACE_TYPES.offerIntake, INTAKE_SPACE_KEY);
 }
 
 // The task ID is the space key, so the requester knows its task space as soon as it writes the request

@@ -11,7 +11,8 @@ import type {
 	TypedObject,
 } from "../../core/protocol/interfaces/internal/types.js";
 import {
-	intakeSpaceRef,
+	offerIntakeSpaceRef,
+	requestIntakeSpaceRef,
 	SPACE_TYPES,
 } from "../../core/protocol/protocol_config/space_definition.js";
 import {
@@ -61,17 +62,17 @@ describe("in-memory: managed spaces", () => {
 		const network = new AtProtocolNetwork();
 		const world = createWorld(network);
 
-		// The coordinator lets agents write offers into its intake and nobody else read
+		// The coordinator lets agents write into its offer intake and nobody else read
 		network.registerService(COORDINATOR_SERVICE, {
 			checkUserAccess: async (_space, user, access) =>
 				user === TAXI && access === "write",
 		});
 		const intake = await world.coordinator.authority.createSpace(
-			SPACE_TYPES.intake,
+			SPACE_TYPES.offerIntake,
 			"main",
-			await loadPolicy("intake.json", COORDINATOR),
+			await loadPolicy("offer_intake.json", COORDINATOR),
 		);
-		assert.equal(intake, intakeSpaceRef(COORDINATOR));
+		assert.equal(intake, offerIntakeSpaceRef(COORDINATOR));
 
 		const changes: string[] = [];
 		await world.coordinator.gateway.watchSpace(intake, (change) =>
@@ -88,7 +89,7 @@ describe("in-memory: managed spaces", () => {
 		);
 		await world.rider.putSpaceRecord(
 			intake,
-			"com.hivemind-network.requester.request",
+			"com.hivemind-network.agent.offer",
 			"b",
 			record,
 		);
@@ -108,9 +109,9 @@ describe("in-memory: managed spaces", () => {
 		const network = new AtProtocolNetwork();
 		const world = createWorld(network);
 		const intake = await world.coordinator.authority.createSpace(
-			SPACE_TYPES.intake,
+			SPACE_TYPES.requestIntake,
 			"main",
-			await loadPolicy("intake.json", COORDINATOR),
+			await loadPolicy("request_intake.json", COORDINATOR),
 		);
 		await assert.rejects(
 			world.taxi.watchSpace(intake, () => {}),
@@ -124,7 +125,7 @@ describe("in-memory: writes and procedures", () => {
 		const network = new AtProtocolNetwork();
 		const world = createWorld(network);
 		await world.rider.putSpaceRecord(
-			intakeSpaceRef(COORDINATOR),
+			requestIntakeSpaceRef(COORDINATOR),
 			"com.hivemind-network.requester.request",
 			"a",
 			{ $type: "com.hivemind-network.test.record" } as unknown as TypedObject,

@@ -56,7 +56,7 @@ An NSID is a reversed domain plus a name, and the domain decides who may publish
 
 ## ADR-003: Repository layout with core, services and hivemind_sdk
 
-Date: 2026-11-18. Status: accepted.
+Date: 2026-11-18. Status: accepted; what `core/` and `services/` mean is refined by ADR-004.
 
 ### Context
 
@@ -76,3 +76,48 @@ Date: 2026-11-18. Status: accepted.
 - Generated lexicon code moves to `core/protocol/generated/` (ignored by git). `tsconfig.json` and `biome.json` include `core/**` and `hivemind_sdk/**` instead of `protocol/**` and `hivemind_library/**`.
 - Tests read the space policies from `core/protocol/type_definition/policy_types/`.
 
+## ADR-004: core is what Hivemind runs and owns, services are swappable
+
+Date: 2026-11-19. Status: accepted.
+
+### Context
+
+ADR-003 put the coordinator into `core/` but left the Hivemind PDS among the services, and `services/` had no rule for what belongs there. The coordinator also needed a place for its parameters, its rules and its running parts.
+
+### Decision
+
+- `core/` holds everything Hivemind runs and owns: `protocol/`, `coordinator/` and `hivemind_pds/` (moved from `services/`).
+- `services/` holds parts the coordinator calls that could be swapped without anything else breaking: matching, routing, space operations, payments. Each implements an interface in `core/protocol/interfaces/internal/`. Only `core/coordinator/main.ts` imports from `services/`.
+- The coordinator has five folders and an entry point: `config/` (parameters only), `library/` (functions only), `authentication/`, `data/`, `runtime/`, and `main.ts`.
+- Parameters are config objects: a type plus a default object, passed into functions and read as `config.parameter` (style sheet, section 6). This holds for the whole repository. Biome reports static-only classes as errors.
+- New internal interfaces for the swappable parts and the coordinator's methods: `RequestRouter`, `SpaceService`, `CoordinatorApi`, plus `BillingStore` and `CoordinatorStores` in `stores.ts`.
+- The coordinator's database is SQLite through `node:sqlite` (built into Node.js 22.13 and later), behind the store interfaces; an in-memory implementation passes the same contract test.
+
+### Consequences
+
+- The coordinator is complete in `core/`, but `main()` cannot start until `services/` has implementations; tests start it with fake services.
+- Geometry moves to the routing service; the demo keeps its own distance function.
+- Adding `@atproto/lex-cbor` (same frozen version) for the attestation's DAG-CBOR encoding.
+- The SQLite file (`data/coordinator.sqlite` by default) is ignored by git.
+
+## ADR-005: Two intake spaces
+
+Date: 2026-11-19. Status: accepted.
+
+### Context
+
+Requests and offers shared one intake space (`com.hivemind-network.space.intake`). A PDS grants access per space, not per collection, so any active agent could also write requests and any requester offers; only readers dropping records by role kept them apart. The space also mixed two streams the coordinator handles differently.
+
+### Decision
+
+- Two managed space types, both with key `main` and read by the coordinator only:
+  - `com.hivemind-network.space.requestIntake`: active requesters write `requester.request`.
+  - `com.hivemind-network.space.offerIntake`: active agents of active operators write `agent.offer`.
+- `space_definition.ts` has `requestIntakeSpaceRef` and `offerIntakeSpaceRef` instead of `intakeSpaceRef`; the policies are `policy_types/request_intake.json` and `offer_intake.json`.
+- The planned per-feed offers space is dropped: one offer intake serves all feeds.
+
+### Consequences
+
+- `checkUserAccess` grants write access per space type, so the PDS itself now keeps requesters out of the offer intake and agents out of the request intake.
+- The SDK writes requests and offers to different addresses.
+- `space.intake` and its policy are removed. Nothing had been released, so no records need migrating.

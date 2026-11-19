@@ -6,6 +6,10 @@ coverage/
 .cache/
 *.tsbuildinfo
 
+# Coordinator database (core/coordinator/config/data_config.ts)
+*.sqlite
+*.sqlite-*
+
 # Local environment files
 .env
 .env.*

@@ -1,0 +1,56 @@
+# Coordinator
+
+The Hivemind coordinator: it registers participants, answers the access checks of every managed space, and runs each task from request to result (`core/protocol/interfaces/external/task_lifecycle.md`). It is the authority of every Hivemind space; its account lives on the Hivemind PDS (`core/hivemind_pds/`).
+
+| Folder or file | What it holds |
+| --- | --- |
+| `config/` | Parameters only, as config objects: a type `<Context>Config` and its defaults `DEFAULT_<CONTEXT>_CONFIG` (style sheet, section 6). |
+| `library/` | Functions only: the rules (task lifecycle, access, registration, scoring, billing), the clock and reading secrets. No network, no storage. |
+| `authentication/` | Who is calling and who the coordinator is: login, service-auth verification, the attestation signer, the DID document. |
+| `data/` | Storage behind the interfaces in `stores.ts`: SQLite for running, memory for tests, one contract test for both. |
+| `runtime/` | The running parts: task runner, public-record indexer, API handlers, XRPC server, billing. |
+| `main.ts` | Entry point: `startCoordinator()` wires everything from what it is given; `main()` builds the real dependencies. |
+
+## Config and library
+
+| Config | Read by |
+| --- | --- |
+| `identity_config.ts` | account, PDS, PLC directory, did:web domain, service and key fragments |
+| `tasks_config.ts` | answer-window bounds and the selection window (`library/task_rules.ts`) |
+| `billing_config.ts` | pricing (`library/billing_rules.ts`) |
+| `runtime_config.ts` | poll interval, firehose, XRPC port |
+| `data_config.ts` | database file |
+| `environment_config.ts` | names of the environment variables holding the secrets (`library/environment.ts`) |
+
+## How a task runs
+
+1. **Request intake.** `runtime/task_runner.ts` reads `requester.request` records through the space service. Active requesters only; an unsupported task type ends in `noCoverage`.
+2. **Routing.** The routing service picks the feeds by task type and coverage; the coordinator then drops private feeds the requester is not allowlisted for.
+3. **Dispatch.** Task space, `collecting` state and one coarsened dispatch per feed; the deadline is `respondBy`.
+4. **Offer intake.** Offers from eligible agents only, before `respondBy`; collection ends early once every eligible agent has answered.
+5. **Ranking.** The matching service ranks the accepted offers with the task type's default criteria.
+6. **Assignment.** Auto mode assigns the best offer; choose mode waits for the requester's selection until `selectBy`. The assignment is signed (`authentication/attestation_signer.ts`) and counted for billing.
+7. **Result.** The assigned agent's `completed` or `failed` progress ends the task; deleting the request cancels it.
+
+Every step stores the task before it writes to a space, so open tasks resume after a restart.
+
+## Calls
+
+`runtime/xrpc_server.ts` verifies the service-auth token of every call (`authentication/service_auth.ts`), then hands the caller's DID to `runtime/api_handlers.ts`:
+
+| Method | Called by |
+| --- | --- |
+| `com.hivemind-network.coordinator.register` | requesters, operators, operators for their agents |
+| `com.hivemind-network.coordinator.setFeedMember` | owners of private feeds |
+| `com.atproto.managedspace.checkUserAccess` | the coordinator's own PDS, for both intakes and every feed space |
+
+## Secrets
+
+The account password and the attestation key come from environment variables (`config/environment_config.ts`), never from code or config files.
+
+## Not finished
+
+- `main()` cannot start a real coordinator until `services/` has implementations; `selectServices` says so. Tests pass their own services to `startCoordinator`.
+- Feed declarations cannot carry scoring weights yet, so the task type's default criteria always apply (`library/scoring.ts` already handles feed weights).
+- The firehose delivers new changes only. Records written before the coordinator started reach the index when they change, or when `register` and `setFeedMember` read them directly.
+- The SDK's `AttestationVerifier` must encode assignments exactly like `attestedBytes` in `authentication/attestation_signer.ts`.

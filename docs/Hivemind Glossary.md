@@ -176,7 +176,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **HivemindOrganization** (hivemind notation): SDK class for operators and feed owners: registers with the coordinator, enrolls agents, publishes feed declarations and manages private-feed allowlists.
 
-**HivemindRequester** (hivemind notation): SDK class for end-user apps: writes requests into the intake space, follows the task space (`RequesterTask`), selects options and cancels.
+**HivemindRequester** (hivemind notation): SDK class for end-user apps: writes requests into the request intake space, follows the task space (`RequesterTask`), selects options and cancels.
 
 **HPKE** (general term): Hybrid Public Key Encryption (RFC 9180). Planned for encrypting request payloads end to end, because spaces control who may read data but do not encrypt it from the hosting PDS.
 
@@ -184,7 +184,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Indexer** (hivemind notation): The coordinator's `PublicRecordIndexer`. Reads the firehose and keeps every `com.hivemind-network.*` public record (agent profiles, feed declarations, feed subscriptions, certifications) as the coordinator's current picture of the network.
 
-**Intake space** (hivemind notation): The coordinator's single managed space `at://{coordinator DID}/space/com.hivemind-network.space.intake/main`. Requesters write requests and agents write offers into it; only the coordinator can read it.
+**Intake spaces** (hivemind notation): The coordinator's two inboxes, both managed spaces that only the coordinator reads (ADR-005). See **Request intake space** and **Offer intake space**.
 
 **Interest group** (hivemind notation): Any group (company, campus, community, warehouse) that sets up a feed so that tasks in its area reach the agents it chooses.
 
@@ -238,13 +238,15 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 ## O
 
-**Offer** (hivemind notation): Record `com.hivemind-network.task.offer` that an agent writes into the intake space in answer to a dispatch: task ID, feed, decision, decline reason, payload and agent snapshot. For rides the payload holds pickup ETA, trip distance and duration, price and vehicle. Neither the requester nor competing operators can read it.
+**Offer** (hivemind notation): Record `com.hivemind-network.task.offer` that an agent writes into the offer intake space in answer to a dispatch: task ID, feed, decision, decline reason, payload and agent snapshot. For rides the payload holds pickup ETA, trip distance and duration, price and vehicle. Neither the requester nor competing operators can read it.
+
+**Offer intake space** (hivemind notation): Managed space `at://{coordinator DID}/space/com.hivemind-network.space.offerIntake/main`. Active agents write their offers and declines into it; only the coordinator reads it.
 
 **Offer option** (hivemind notation): One ranked choice the requester sees in the task state (`offerOption`): option ID, agent, agent and operator display names, score, headline and terms. A filtered view of an offer; the raw offers stay with the coordinator.
 
 **Offer ranking** (hivemind notation): `rankCandidates` in `packages/coordinator/src/matching/offer-ranker.ts`, which scores offers by simple additive weighting; see Ranking.
 
-**Offers space** (hivemind notation): Planned change: a separate space per feed for agents' offers, so replies no longer share the intake space with requests.
+**Offers space** (hivemind notation): Superseded by the offer intake space (ADR-005): one offer inbox for all feeds instead of one per feed.
 
 **Open union** (atproto term): A lexicon `union` that accepts types beyond the ones it lists (unions are open unless marked `closed`). Hivemind's task payloads are open unions, so a new task type adds its own lexicon without changing the core task records.
 
@@ -312,7 +314,9 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Repository / repo** (atproto term): An account's signed set of records, organised as an MST and versioned by commits. Portable: it can be exported and moved to another PDS.
 
-**Request** (hivemind notation): Record `com.hivemind-network.task.request` that the requester writes into the intake space: task type, payload, selection mode and `maxWaitMs`. The start of every task; only the coordinator can read it.
+**Request** (hivemind notation): Record `com.hivemind-network.task.request` that the requester writes into the request intake space: task type, payload, selection mode and `maxWaitMs`. The start of every task; only the coordinator can read it.
+
+**Request intake space** (hivemind notation): Managed space `at://{coordinator DID}/space/com.hivemind-network.space.requestIntake/main`. Active requesters write their requests into it; only the coordinator reads it.
 
 **Request proof** (atproto term, Spaces alpha): A signature by the bound key on each request that uses a space credential, proving the caller holds that key. The alpha uses HTTP message signatures (RFC 9421); the simulation uses a signed JWS header instead.
 
@@ -370,7 +374,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Space host** (atproto term, Spaces alpha): The PDS of the space authority, which runs the space itself. For Hivemind's spaces that is the Hivemind PDS, because it hosts the coordinator's account.
 
-**Space key / skey** (atproto term, Spaces alpha): The last part of a space reference, chosen by the authority. Hivemind uses `main` for the intake space, `{declaration rkey}.{owner DID suffix}` for feed spaces and the task ID for task spaces.
+**Space key / skey** (atproto term, Spaces alpha): The last part of a space reference, chosen by the authority. Hivemind uses `main` for both intake spaces, `{declaration rkey}.{owner DID suffix}` for feed spaces and the task ID for task spaces.
 
 **Space reference** (atproto term, Spaces alpha): The address of a space: `at://{authority DID}/space/{space type}/{space key}`, e.g. `at://did:web:hivemind-network.com/space/com.hivemind-network.space.intake/main`.
 

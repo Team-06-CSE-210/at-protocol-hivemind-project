@@ -10,7 +10,7 @@ The coordinator keeps the phase in `coordinator.taskState` (record key `self`) i
 
 | Phase | Entered when | Coordinator does | Leaves to |
 | --- | --- | --- | --- |
-| `collecting` | The coordinator reads a valid `requester.request` in the intake space and at least one feed matches. | Creates the task space with the requester as member, writes `taskState`, writes one `coordinator.dispatch` per matched feed. | `awaitingSelection` (choose mode) or `assigned` (auto mode) once `respondBy` passes or every eligible agent has answered; `noOffers` if no offer was accepted. |
+| `collecting` | The coordinator reads a valid `requester.request` in the request intake space and at least one feed matches. | Creates the task space with the requester as member, writes `taskState`, writes one `coordinator.dispatch` per matched feed. | `awaitingSelection` (choose mode) or `assigned` (auto mode) once `respondBy` passes or every eligible agent has answered; `noOffers` if no offer was accepted. |
 | `awaitingSelection` | Ranking is done in choose mode. | Writes the ranked `options` and `selectBy` into `taskState`. | `assigned` on a valid `requester.selection`; `expired` once `selectBy` passes. |
 | `assigned` | The best offer (auto) or the selected one (choose) wins. | Writes `coordinator.assignment`, adds the winning agent to the task space, clears `options`, sets `assignedAgent`, deletes all dispatches of the task. | `completed` or `failed` when the assigned agent writes `agent.progress` with that status. |
 

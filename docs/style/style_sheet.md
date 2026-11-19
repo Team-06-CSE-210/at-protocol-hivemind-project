@@ -19,7 +19,7 @@ Every file reads top-down in the same order:
 
 1. Imports (Biome sorts them).
 2. A header comment: what the file is, who uses it, what it hides or leaves out.
-3. Sections, each under a banner: constants and options first, then the main export, then helpers at the bottom.
+3. Sections, each under a banner: constants first, then the main export, then helpers at the bottom. Tunable values are not constants; they come in through a config object (section 6).
 
 ```ts
 import { sha256 } from "@atproto/crypto";
@@ -32,8 +32,8 @@ import type { Did, SpaceRef } from "../interfaces/internal/types.js";
 // Constants
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-// The frozen alpha issues credentials valid for 600 s; renew a minute before they expire
-const CREDENTIAL_RENEWAL_MARGIN_MS = 60_000;
+// RFC 4648 base32 alphabet, lower case
+const BASE32_ALPHABET = "abcdefghijklmnopqrstuvwxyz234567";
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Atproto Gateway
@@ -92,7 +92,8 @@ Titles are a few words naming what follows ("Space Interaction", "Credentials an
 
 - **Descriptive names, no abbreviations:** `pickupDistanceMeters`, `syncedRevisions`, `credentialFor`, not `dist`, `revs`, `getCred`.
 - **Units in the name** whenever a number has one: `pollIntervalMs`, `maxPickupDistanceMeters`, `pickupEtaSeconds`, `amountMinor`, `latE7`, `batteryPercent`.
-- **Constants** in `UPPER_SNAKE_CASE` at the top of the file, with digit separators: `60_000`, `6_371_008.8`.
+- **Constants** (values that never change, such as physical or protocol facts) in `UPPER_SNAKE_CASE` at the top of the file, with digit separators: `6_371_008.8`. Tunable values are parameters and go into config objects (section 6).
+- **Config objects:** the type is `<Context>Config` (`TasksConfig`), its default object `DEFAULT_<CONTEXT>_CONFIG`.
 - **Types and classes** in `PascalCase`, named after the role: `AtprotoGateway`, `SpaceAuthority`, `TaxiBehavior`. Implementations name what they run on: `PdsGateway`, `LocalSimGateway`.
 - **Functions** start with a verb (`formatSpaceRef`, `parseSpaceRef`, `createTaskId`); readers of a value are named after it (`authorityOf`, `feedKeyOf`).
 - **Booleans** read as a question or state: `stopped`, `roundRunning`, `busy`, `mayAccess`.
@@ -120,14 +121,47 @@ Titles are a few words naming what follows ("Space Interaction", "Credentials an
 - **Errors:** a dedicated `Error` subclass for each condition a caller handles (`SpaceAccessDeniedError`, `PolicyMismatchError`); otherwise `new Error()` naming the method and cause (`` `getSpaceCredential failed: ${body.error}` ``). Errors in background work go to an `onError` option, never silently nowhere.
 - **Inject time and randomness** where tests or the demo need control: `sleep`, `now`, `deliveryDelayMs`.
 
-## 6. Interfaces
+## 6. Logic and configuration
+
+The rule behind this section: **parameters live in config objects, logic lives in functions, and the two meet only as a function argument.**
+
+- **Every tunable value is a parameter in a config object**: windows, timeouts, intervals, weights, limits, fees, names of environment variables. Config objects live in `config/` folders and contain no functions. A small folder without a `config/` folder keeps its config object in one `<context>_config.ts` file next to the code (`core/hivemind_pds/pds_config.ts`).
+- **Functions live in `library/` folders**, one file per usage context (`library/task_rules.ts`, `library/billing_rules.ts`, …), without subfolders. They receive the config object as an argument and never hard-code a tunable value.
+- **A config object is a type plus a default object:**
+  ```ts
+  // config/tasks_config.ts
+  export interface TasksConfig {
+  	// Longest answer window a feed may declare (architecture: 50 ms to 10 min)
+  	readonly maxAnswerWindowMs: number;
+  	// Time the requester has to pick an option in choose mode
+  	readonly selectionWindowMs: number;
+  }
+
+  export const DEFAULT_TASKS_CONFIG: TasksConfig = {
+  	maxAnswerWindowMs: 600_000,
+  	selectionWindowMs: 60_000,
+  };
+  ```
+  ```ts
+  // library/task_rules.ts
+  export function selectBy(rankedAt: Date, config: TasksConfig): Date {
+  	return new Date(rankedAt.getTime() + config.selectionWindowMs);
+  }
+  ```
+- **Read parameters as `config.parameterName`.** Tests and the demo change single values with a spread instead of editing the defaults: `{ ...DEFAULT_TASKS_CONFIG, selectionWindowMs: 1_000 }`.
+- **Config objects are plain data** (numbers, strings, booleans, arrays, nested objects), so they can later be loaded from a file or the environment unchanged. Dependencies with behaviour (clock, gateway, stores) are passed separately, never inside a config object.
+- **No static-only classes for parameters.** They cannot be passed in or overridden per call; Biome reports them as errors (`noStaticOnlyClass`).
+- **Secrets never appear in defaults.** The config names the environment variable (`attestationKeyVariable: "HIVEMIND_ATTESTATION_KEY"`); a library function reads it at startup and fails if it is missing.
+- **`config/` and `library/` share context names**: the parameters for `library/task_rules.ts` are in `config/tasks_config.ts`, those for `library/billing_rules.ts` in `config/billing_config.ts`.
+
+## 7. Interfaces
 
 - **Every interface is defined in `core/protocol/interfaces/`**, even internal ones: `external/` for what other participants call, `internal/` for what our own components share.
 - **Small and non-bloated:** only the methods callers need. An interface hides its machinery; the gateway hides credentials, signatures, MACs and polling behind `watchSpace`.
 - **Interfaces to the outside world get a real and an in-memory implementation**, plus one contract test that both pass (`AtprotoGateway` is the model: `tests/gateway/gateway_contract.ts`).
 - The interface's comments say what callers can rely on, including surprises (ordering per writer, invisible writes without access).
 
-## 7. Lexicons (message types)
+## 8. Lexicons (message types)
 
 - **Namespace `com.hivemind-network.*`** for the open protocol; **`internal.hivemind.*`** for types that never leave our infrastructure (ADR-002).
 - **Same behaviour, same message type.** Keep types general; add an application-specific type only when its behaviour differs.
@@ -136,7 +170,7 @@ Titles are a few words naming what follows ("Space Interaction", "Credentials an
 - **Describe every definition, and every field whose meaning, unit or rule is not obvious** from its name and type.
 - One JSON file per NSID; the build places files by their `id`, so folders can group them freely.
 
-## 8. Docs
+## 9. Docs
 
 - **Short sentences, plain words, active voice.** Say what something is before how it works.
 - **Tables** for reference and comparison ("File | What it is | Used for"), **numbered lists** for procedures, bullets for unordered facts.
@@ -144,7 +178,7 @@ Titles are a few words naming what follows ("Space Interaction", "Credentials an
 - **Decisions go into `docs/ADR.md`** as Context, Decision, Consequences, with an ISO date and a status.
 - **Dates** as `YYYY-MM-DD`; units with a space (`600 s`, `400 m`).
 
-## 9. Tools and commits
+## 10. Tools and commits
 
 - Layout is Biome's (tabs, double quotes, semicolons, sorted imports): run `npm run fix` rather than formatting by hand, and `npm run check` before a PR.
 - `npm test` builds and runs every test, including the gateway contract against an in-process PDS.

@@ -1,0 +1,14 @@
+{
+  "lexicon": 1,
+  "id": "com.hivemind-network.space.requestIntake",
+  "description": "Space type of the coordinator's request inbox. Requesters write their requests here; only the coordinator reads. Access rules: type_definition/policy_types/request_intake.json.",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:main",
+      "name": "Hivemind request intake",
+      "description": "Task requests sent to the Hivemind coordinator.",
+      "collections": ["com.hivemind-network.requester.request"]
+    }
+  }
+}

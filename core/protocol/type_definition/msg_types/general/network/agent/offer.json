@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "An agent's answer to a dispatch. Written into the coordinator's intake space (or a per-feed offers space); neither the requester nor other agents can read it. Deleting it withdraws the offer.",
+      "description": "An agent's answer to a dispatch. Written into the coordinator's offer intake space; neither the requester nor other agents can read it. Deleting it withdraws the offer.",
       "key": "tid",
       "record": {
         "type": "object",
