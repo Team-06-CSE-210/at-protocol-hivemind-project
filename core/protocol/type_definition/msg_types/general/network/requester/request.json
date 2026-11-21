@@ -4,7 +4,7 @@
   "defs": {
     "main": {
       "type": "record",
-      "description": "A requester asks for a task. Written into the coordinator's intake space; only the coordinator can read it. Deleting this record cancels the task.",
+      "description": "A requester asks for a task. Written into the coordinator's request intake space; only the coordinator can read it. Deleting this record cancels the task.",
       "key": "tid",
       "record": {
         "type": "object",

@@ -16,10 +16,10 @@ Folder paths do not have to mirror the NSIDs: `npm run lex:build` (`scripts/buil
 
 | NSID (`com.hivemind-network.…`) | Written by | Lives in | Record key |
 | --- | --- | --- | --- |
-| `requester.request` | requester | intake space | tid |
+| `requester.request` | requester | request intake space | tid |
 | `requester.selection` | requester | task space | self |
 | `agent.profile` | agent | public repo | self |
-| `agent.offer` | agent | intake space | tid |
+| `agent.offer` | agent | offer intake space | tid |
 | `agent.progress` | assigned agent | task space | tid |
 | `coordinator.dispatch` | coordinator | feed space | any |
 | `coordinator.taskState` | coordinator | task space | self |
@@ -34,7 +34,8 @@ Each space type is a lexicon of type `space` that lists the collections its spac
 
 | NSID (`com.hivemind-network.…`) | Space key | Collections |
 | --- | --- | --- |
-| `space.intake` | `main` | `requester.request`, `agent.offer` |
+| `space.requestIntake` | `main` | `requester.request` |
+| `space.offerIntake` | `main` | `agent.offer` |
 | `space.feed` | derived from the feed declaration | `coordinator.dispatch` |
 | `space.task` | task ID | `requester.selection`, `agent.progress`, `coordinator.taskState`, `coordinator.assignment` |
 

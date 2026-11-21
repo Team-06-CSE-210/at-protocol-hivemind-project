@@ -1,6 +1,6 @@
 {
-  "spaceType": "com.hivemind-network.space.intake",
-  "description": "The coordinator's single inbox. Requesters write requests and agents write offers; only the coordinator reads.",
+  "spaceType": "com.hivemind-network.space.offerIntake",
+  "description": "The coordinator's offer inbox. Agents write offers and declines; only the coordinator reads.",
   "policy": {
     "$type": "com.atproto.managedspace.policy",
     "managingApp": "{coordinator}#hivemind_coordinator",
@@ -9,7 +9,6 @@
   "spaceKey": "main",
   "read": ["coordinator"],
   "write": {
-    "com.hivemind-network.requester.request": ["requester"],
     "com.hivemind-network.agent.offer": ["agent"]
   }
 }

@@ -24,8 +24,11 @@ Defined as TypeScript interfaces, because lexicons describe data and HTTP method
 | --- | --- | --- | --- |
 | `types.ts` | readable names for the generated message types | (generated) | all files below |
 | `task_type_module.ts` | `TaskTypeModule` | one module per application | coordinator |
-| `matching_engine.ts` | `MatchingEngine` | coordinator (later possibly a Java service) | coordinator |
-| `stores.ts` | `ParticipantStore`, `FeedMemberStore`, `TaskStore`, `PublicRecordIndex`, `RevisionStore` | `services/hivemind_pds/data_handling/` | coordinator, gateways |
+| `matching_engine.ts` | `MatchingEngine` | `services/matching_service/` (later possibly a Java service) | coordinator |
+| `request_router.ts` | `RequestRouter` | `services/routing_service/` | coordinator |
+| `space_service.ts` | `SpaceService`: intakes, feed spaces, task spaces | `services/space_service/` | coordinator |
+| `coordinator_api.ts` | `CoordinatorApi`: register, setFeedMember, checkUserAccess | `core/coordinator/runtime/api_handlers.ts` | XRPC server, in-memory network |
+| `stores.ts` | `ParticipantStore`, `FeedMemberStore`, `TaskStore`, `PublicRecordIndex`, `RevisionStore`, `BillingStore` (all together: `CoordinatorStores`) | `core/coordinator/data/` | coordinator, gateways |
 | `atproto_gateway.ts` | `AtprotoGateway`, `SpaceAuthority` | `core/protocol/communication/network/at_gateway_pds.ts` (real PDS), `core/protocol/communication/in_memory/at_gateway_localsim.ts` (in-memory) | coordinator, SDK |
 | `attestation.ts` | `AttestationSigner`, `AttestationVerifier` | coordinator, SDK | coordinator, agents |
 | `client_lib.ts` | `AgentBehavior`, `AgentClient`, `RequesterClient`, `OrganizationClient` | SDK in `hivemind_sdk/` (operators implement `AgentBehavior`) | demo, view, operators |

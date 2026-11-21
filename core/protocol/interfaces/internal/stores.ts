@@ -16,9 +16,9 @@ import type {
 } from './types.js'
 
 /*
- * Storage of the coordinator (services/hivemind_pds/data_handling). Implemented with a JSON file for the
- * prototype and a database later. The stored shapes are compositions of protocol messages and
- * add no message types of their own.
+ * Storage of the coordinator. Implemented in core/coordinator/data/: SQLite for running, in memory
+ * for tests. The stored shapes are compositions of protocol messages and add no message types of
+ * their own.
  */
 
 /** Registered participants: requesters, operators and agents. */
@@ -40,14 +40,21 @@ export interface FeedMemberStore {
 export interface TaskRecord {
   taskId: TaskId
   requester: Did
-  /** Record key of the request in the requester's intake repo. */
+  /** Record key of the request in the requester's repo inside the request intake space. */
   requestRkey: string
   request: RequesterRequest
   matchedFeeds: AtUri[]
   offers: Array<{ agent: Did; rkey: string; offer: AgentOffer }>
-  /** The coordinator's own copy of what it last wrote as the task state. */
+  /** The task state the spaces should show; the coordinator's own copy. */
   state: TaskState
   assignment?: Assignment
+  /**
+   * Whether the spaces and billing reflect this record. Every state change stores the task with
+   * false first; the coordinator then makes the writes the state implies (all idempotent) and sets
+   * it to true. A false one is retried until the writes succeed, also after a restart.
+   * Records stored before this field existed count as published.
+   */
+  published: boolean
 }
 
 export interface TaskStore {
@@ -58,7 +65,10 @@ export interface TaskStore {
    */
   findByRecord(author: Did, collection: Nsid, rkey: string): Promise<TaskRecord | undefined>
   put(task: TaskRecord): Promise<void>
-  /** Tasks not in an end phase, so the coordinator can resume their deadlines after a restart. */
+  /**
+   * Tasks the coordinator still has work on, so it can resume them after a restart: those not in
+   * an end phase, and those whose writes are still owed (published false).
+   */
   listOpen(): Promise<TaskRecord[]>
 }
 
@@ -87,4 +97,24 @@ export interface PublicRecordIndex {
 export interface RevisionStore {
   get(space: SpaceRef, writer: Did): Promise<string | undefined>
   set(space: SpaceRef, writer: Did, revision: string): Promise<void>
+}
+
+/** Assignments per agent and month, for the included quota and the fee above it (table billing_assignments). */
+export interface BillingStore {
+  /**
+   * Count a task's assignment to the agent in the month (YYYY-MM). Once per task: recording the
+   * same task again changes nothing, so a repeated write cannot bill twice.
+   */
+  recordAssignment(taskId: TaskId, agent: Did, month: string): Promise<void>
+  countAssignments(agent: Did, month: string): Promise<number>
+}
+
+/** Every store the coordinator uses, as one object for wiring. */
+export interface CoordinatorStores {
+  participants: ParticipantStore
+  feedMembers: FeedMemberStore
+  tasks: TaskStore
+  publicIndex: PublicRecordIndex
+  revisions: RevisionStore
+  billing: BillingStore
 }

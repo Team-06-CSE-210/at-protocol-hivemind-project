@@ -10,11 +10,11 @@ The coordinator keeps the phase in `coordinator.taskState` (record key `self`) i
 
 | Phase | Entered when | Coordinator does | Leaves to |
 | --- | --- | --- | --- |
-| `collecting` | The coordinator reads a valid `requester.request` in the intake space and at least one feed matches. | Creates the task space with the requester as member, writes `taskState`, writes one `coordinator.dispatch` per matched feed. | `awaitingSelection` (choose mode) or `assigned` (auto mode) once `respondBy` passes or every eligible agent has answered; `noOffers` if no offer was accepted. |
+| `collecting` | The coordinator reads a valid `requester.request` in the request intake space and at least one feed matches. | Creates the task space with the requester as member, writes `taskState`, writes one `coordinator.dispatch` per matched feed. | `awaitingSelection` (choose mode) or `assigned` (auto mode) once `respondBy` passes or every eligible agent has answered; `noOffers` if no offer was accepted. |
 | `awaitingSelection` | Ranking is done in choose mode. | Writes the ranked `options` and `selectBy` into `taskState`. | `assigned` on a valid `requester.selection`; `expired` once `selectBy` passes. |
 | `assigned` | The best offer (auto) or the selected one (choose) wins. | Writes `coordinator.assignment`, adds the winning agent to the task space, clears `options`, sets `assignedAgent`, deletes all dispatches of the task. | `completed` or `failed` when the assigned agent writes `agent.progress` with that status. |
 
-End phases: `completed`, `failed`, `cancelled`, `noCoverage`, `noOffers`, `expired`. Once a task reaches one, nobody writes to its space any more.
+End phases: `completed`, `failed`, `cancelled`, `noCoverage`, `noOffers`, `expired`. Once a task reaches one, nobody writes to its space any more, except the coordinator repeating the end phase until the space shows it (see [Failed writes](#failed-writes)).
 
 | End phase | Cause |
 | --- | --- |
@@ -43,3 +43,13 @@ A PDS grants access per space, not per collection. Readers therefore drop record
 - The coordinator ignores a `selection` from anyone but the task's requester, and `progress` from anyone but the assigned agent.
 - Agents and requesters ignore `taskState`, `assignment` and `dispatch` records not written by the coordinator.
 - The coordinator ignores offers after `respondBy` and offers with `decision: accept` but no payload.
+- A `requester.request` record is read once. Changing it later, even to a new task ID, does nothing; to change a request, the requester deletes it (which cancels the task) and writes a new one.
+- An `agent.offer` record belongs to the task it was first written for, as long as it is the agent's current offer for that task. Changing it to name another task does nothing. A new offer for the same task replaces the agent's earlier one; the earlier record is then no longer tied to the task, and changing it counts as a new offer.
+
+## Failed writes
+
+The coordinator stores every phase change before it writes it into the spaces. If a write fails (a space host cannot be reached), it tries again, after one second at first and then with a doubling delay of at most one minute, and again after a restart, until the spaces show the stored phase. Every write it makes can be repeated without changing the result.
+
+- Participants may see a phase late, but never one the coordinator has not decided.
+- Deadlines (`respondBy`, `selectBy`) run on the stored phase, not on what a space shows. A choose-mode requester whose options appear late has correspondingly less time to select.
+- Each assignment is billed once, however often its writes are repeated.
