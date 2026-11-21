@@ -121,3 +121,27 @@ Requests and offers shared one intake space (`com.hivemind-network.space.intake`
 - `checkUserAccess` grants write access per space type, so the PDS itself now keeps requesters out of the offer intake and agents out of the request intake.
 - The SDK writes requests and offers to different addresses.
 - `space.intake` and its policy are removed. Nothing had been released, so no records need migrating.
+
+## ADR-006: The coordinator's DID entries are published, and checked at startup
+
+Date: 2026-11-21. Status: accepted.
+
+### Context
+
+The managed spaces name `<coordinator DID>#hivemind_coordinator` as their managing app. Before a write lands, the space host's PDS looks that service up in the coordinator's DID document and asks it `checkUserAccess`; any failure there counts as a denial. Agents verify assignments with `#hivemind_attestation` from the same document. Neither entry was ever published: `buildDidDocument` existed, but nothing put its output anywhere. On a real PDS every write to an intake or feed space would have been refused and no assignment could have been verified. The tests used in-memory fakes that skip the PDS, so they passed. A CodeRabbit review flagged the missing attestation key, which led to this.
+
+### Decision
+
+- Production uses `did:web:hivemind-network.com`. `scripts/did_document.ts` builds the document from the PDS's recommended credentials plus both Hivemind entries. The team's web host serves it at `https://hivemind-network.com/.well-known/did.json`.
+- Local development uses the did:plc that `@atproto/dev-env` creates. `core/hivemind_pds/start_local.ts` adds both entries with a PLC update through the PDS (`publishCoordinatorIdentity`).
+- `main()` resolves the coordinator's DID, bypassing the cache, and refuses to start with `UnpublishedIdentityError` if either entry is missing or differs from the configured key and service URL.
+- The attestation key is a P-256 key the team generates with `scripts/generate_attestation_key.ts` and keeps only in `HIVEMIND_ATTESTATION_KEY`.
+
+### Consequences
+
+- Rotating the attestation key or moving the XRPC server means republishing the document first. The startup check enforces that order.
+- Assignments signed with an earlier key stop verifying once the document changes. That is acceptable for the demo; listing old keys under new fragments would fix it if needed.
+- Whoever controls the hivemind-network.com web host controls the coordinator's identity. did:web has no rotation keys to recover with, unlike did:plc.
+- PDSes cache DID documents: a refresh starts after an hour and an entry is kept at most a day (PDS defaults `didCacheStaleTTL` and `didCacheMaxTTL`). A republished document can take that long to reach them.
+- The dev-env PLC directory serves P-256 keys in the older `EcdsaSecp256r1VerificationKey2019` encoding, did:web and plc.directory as `Multikey`. The check compares did:keys, so both pass.
+- The did:web account itself is created once by hand, with a bootstrap key (`core/hivemind_pds/_hivemind_pds.md`).

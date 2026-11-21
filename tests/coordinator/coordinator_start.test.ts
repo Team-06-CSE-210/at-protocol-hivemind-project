@@ -6,6 +6,7 @@ import { startCoordinator } from "../../core/coordinator/main.js";
 import { toLocalSimService } from "../../core/coordinator/runtime/xrpc_server.js";
 import { LocalSimGateway } from "../../core/protocol/communication/in_memory/at_gateway_localsim.js";
 import { AtProtocolNetwork } from "../../core/protocol/communication/in_memory/at_protocol_network.js";
+import type { AtprotoGateway } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type {
 	Did,
 	TypedObject,
@@ -75,5 +76,36 @@ describe("startCoordinator", () => {
 		assert.equal(registration.status, "active");
 
 		await running.stop();
+	});
+
+	test("a failed start leaves no firehose subscription open", async () => {
+		let openSubscriptions = 0;
+		const gateway = {
+			watchPublic: async () => {
+				openSubscriptions += 1;
+				return () => {
+					openSubscriptions -= 1;
+				};
+			},
+			getRecord: async () => undefined,
+		} as unknown as AtprotoGateway;
+		const spaces = new FakeSpaceService();
+		spaces.watchOfferIntake = async () => {
+			throw new Error("offer intake unreachable");
+		};
+
+		await assert.rejects(
+			startCoordinator({
+				coordinator: COORDINATOR,
+				gateway,
+				stores: createMemoryStores(COORDINATOR),
+				services: { router: fakeRouter, matching: fakeMatching, spaces },
+				signer: fakeSigner,
+				clock: new ManualClock(START),
+			}),
+			/offer intake unreachable/,
+		);
+		assert.equal(openSubscriptions, 0);
+		assert.equal(spaces.watchedIntakes(), 0);
 	});
 });

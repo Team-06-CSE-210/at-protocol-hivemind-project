@@ -376,9 +376,9 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **Space key / skey** (atproto term, Spaces alpha): The last part of a space reference, chosen by the authority. Hivemind uses `main` for both intake spaces, `{declaration rkey}.{owner DID suffix}` for feed spaces and the task ID for task spaces.
 
-**Space reference** (atproto term, Spaces alpha): The address of a space: `at://{authority DID}/space/{space type}/{space key}`, e.g. `at://did:web:hivemind-network.com/space/com.hivemind-network.space.intake/main`.
+**Space reference** (atproto term, Spaces alpha): The address of a space: `at://{authority DID}/space/{space type}/{space key}`, e.g. `at://did:web:hivemind-network.com/space/com.hivemind-network.space.requestIntake/main`.
 
-**Space type** (atproto term, Spaces alpha): An NSID that says what kind of space it is. Hivemind defines `com.hivemind-network.space.intake`, `com.hivemind-network.space.feed` and `com.hivemind-network.space.task`.
+**Space type** (atproto term, Spaces alpha): An NSID that says what kind of space it is. Hivemind defines `com.hivemind-network.space.requestIntake`, `com.hivemind-network.space.offerIntake`, `com.hivemind-network.space.feed` and `com.hivemind-network.space.task`.
 
 **SpaceReader** (hivemind notation): Client class in `packages/atproto-client` that reads one space for one account: gets a delegation token, exchanges it for a space credential, signs request proofs and registers for notifications.
 

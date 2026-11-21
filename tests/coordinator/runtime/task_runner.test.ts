@@ -347,3 +347,66 @@ describe("task runner: restart", () => {
 		assert.equal(second.spaces.assignments.get(taskId)?.agent, TAXI_ONE);
 	});
 });
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Record identity
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+describe("task runner: record identity", () => {
+	test("changing a request record to a new task ID opens no second task", async () => {
+		const harness = await seededHarness();
+		const first = taskIdFor("first");
+		const second = taskIdFor("second");
+		harness.spaces.pushRequest(created(RIDER, "r1", rideRequest(first)));
+		await settle(harness);
+
+		harness.spaces.pushRequest({
+			...created(RIDER, "r1", rideRequest(second)),
+			action: "update",
+		});
+		await settle(harness);
+		assert.equal(await harness.stores.tasks.get(second), undefined);
+		assert.equal(harness.spaces.taskSpaces.has(second), false);
+
+		// Deleting the record still cancels the task it opened
+		harness.spaces.pushRequest(deleted(RIDER, REQUEST, "r1"));
+		await settle(harness);
+		assert.equal(harness.spaces.phaseOf(first), "cancelled");
+	});
+
+	test("an offer record cannot move to another task", async () => {
+		const harness = await seededHarness();
+		const first = taskIdFor("offerone");
+		const second = taskIdFor("offertwo");
+		harness.spaces.pushRequest(created(RIDER, "r1", rideRequest(first)));
+		harness.spaces.pushRequest(created(RIDER, "r2", rideRequest(second)));
+		harness.spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(first, 300)));
+		await settle(harness);
+
+		harness.spaces.pushOffer({
+			...created(TAXI_ONE, "o1", rideOffer(second, 120)),
+			action: "update",
+		});
+		await settle(harness);
+		assert.deepEqual((await harness.stores.tasks.get(second))?.offers, []);
+		assert.equal((await harness.stores.tasks.get(first))?.offers.length, 1);
+	});
+});
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Failed start
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+describe("task runner: failed start", () => {
+	test("a failed start leaves no intake subscribed", async () => {
+		const spaces = new FakeSpaceService();
+		spaces.watchOfferIntake = async () => {
+			throw new Error("offer intake unreachable");
+		};
+		await assert.rejects(
+			startHarness(createMemoryStores(COORDINATOR), spaces),
+			/offer intake unreachable/,
+		);
+		assert.equal(spaces.watchedIntakes(), 0);
+	});
+});

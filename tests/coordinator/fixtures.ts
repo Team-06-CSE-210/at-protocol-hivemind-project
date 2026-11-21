@@ -300,6 +300,11 @@ export class FakeSpaceService implements SpaceService {
 	isWatched(taskId: TaskId): boolean {
 		return (this.taskListeners.get(taskId)?.size ?? 0) > 0;
 	}
+
+	// How many intake subscriptions are still open
+	watchedIntakes(): number {
+		return this.requestListeners.size + this.offerListeners.size;
+	}
 }
 
 // Every feed that accepts the task type; geometry is the routing service's job

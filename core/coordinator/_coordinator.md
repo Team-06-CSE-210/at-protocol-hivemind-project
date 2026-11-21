@@ -44,9 +44,23 @@ Every step stores the task before it writes to a space, so open tasks resume aft
 | `com.hivemind-network.coordinator.setFeedMember` | owners of private feeds |
 | `com.atproto.managedspace.checkUserAccess` | the coordinator's own PDS, for both intakes and every feed space |
 
+## Identity
+
+The coordinator's DID document must carry two entries besides the PDS's own (ADR-006):
+
+| Entry | Used by |
+| --- | --- |
+| `#hivemind_coordinator` | PDSes, to reach `checkUserAccess` before a write to a managed space lands |
+| `#hivemind_attestation` | agents, to verify an assignment's signature |
+
+`main()` checks both at startup and refuses to start if one is missing or outdated (`identityProblems` in `authentication/did_document.ts`).
+
+- Locally, `core/hivemind_pds/start_local.ts` publishes them in the coordinator's did:plc.
+- In production, `scripts/did_document.ts` builds the did:web document; the web host serves it at `https://<webDomain>/.well-known/did.json`. Run it again after rotating the attestation key or changing `serviceUrl`.
+
 ## Secrets
 
-The account password and the attestation key come from environment variables (`config/environment_config.ts`), never from code or config files.
+The account password and the attestation key come from environment variables (`config/environment_config.ts`), never from code or config files. `scripts/generate_attestation_key.ts` makes a new attestation key.
 
 ## Not finished
 

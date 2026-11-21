@@ -118,15 +118,23 @@ export class TaskRunner {
 			await this.enqueue(task.taskId, () => this.resume(task.taskId));
 		}
 
-		// 2. Follow both intakes; each replays what it holds, and known records are skipped
-		this.stopIntakes.push(
-			await spaces.watchRequestIntake((change) => {
-				this.handleRequestChange(change).catch(this.onError);
-			}),
-			await spaces.watchOfferIntake((change) => {
-				this.handleOfferChange(change).catch(this.onError);
-			}),
-		);
+		// 2. Follow both intakes; each replays what it holds, and known records are skipped.
+		//    Each stop function is kept as soon as it exists, so a failed start leaves nothing subscribed
+		try {
+			this.stopIntakes.push(
+				await spaces.watchRequestIntake((change) => {
+					this.handleRequestChange(change).catch(this.onError);
+				}),
+			);
+			this.stopIntakes.push(
+				await spaces.watchOfferIntake((change) => {
+					this.handleOfferChange(change).catch(this.onError);
+				}),
+			);
+		} catch (error) {
+			await this.stop();
+			throw error;
+		}
 	}
 
 	// Stops following spaces and drops timers; stored tasks resume on the next start()
@@ -170,6 +178,15 @@ export class TaskRunner {
 				}
 				return;
 			}
+			// A request record is read once: a later change to it, even to a new task ID, is ignored
+			const consumed = await this.dependencies.stores.tasks.findByRecord(
+				author,
+				collection,
+				rkey,
+			);
+			if (consumed !== undefined) {
+				return;
+			}
 			const parsed = hivemind.requester.request.main.safeParse(change.record);
 			if (!parsed.success) {
 				return;
@@ -203,6 +220,15 @@ export class TaskRunner {
 				return;
 			}
 			const offer = parsed.value;
+			// An offer record stays with the task it was first written for
+			const linked = await this.dependencies.stores.tasks.findByRecord(
+				author,
+				collection,
+				rkey,
+			);
+			if (linked !== undefined && linked.taskId !== offer.taskId) {
+				return;
+			}
 			await this.enqueue(offer.taskId, () =>
 				this.receiveOffer(offer.taskId, { agent: author, rkey, offer }),
 			);

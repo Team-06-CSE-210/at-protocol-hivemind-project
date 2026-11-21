@@ -17,7 +17,11 @@ import type { CoordinatorStores } from "../protocol/interfaces/internal/stores.j
 import type { Did } from "../protocol/interfaces/internal/types.js";
 import { logInCoordinator } from "./authentication/account_session.js";
 import { P256AttestationSigner } from "./authentication/attestation_signer.js";
-import { attestationKeyId } from "./authentication/did_document.js";
+import {
+	attestationKeyId,
+	identityProblems,
+	UnpublishedIdentityError,
+} from "./authentication/did_document.js";
 import {
 	type BillingConfig,
 	DEFAULT_BILLING_CONFIG,
@@ -131,12 +135,18 @@ export async function startCoordinator(
 	});
 	await indexer.start();
 
-	// 3. The tasks: open ones resume, then both intakes are followed
+	// 3. The tasks: open ones resume, then both intakes are followed.
+	//    If that fails, the indexer stops too, so no firehose subscription is left open
 	const runner = new TaskRunner(
 		{ stores, spaces, router, matching, signer, billing, clock, onError },
 		configs.tasks,
 	);
-	await runner.start();
+	try {
+		await runner.start();
+	} catch (error) {
+		await indexer.stop();
+		throw error;
+	}
 
 	return {
 		api,
@@ -182,8 +192,21 @@ export async function main(
 	// did:web:<webDomain> in production, a did:plc on a local PDS
 	const coordinator = agent.assertDid;
 
-	// 2. Storage, network access and the attestation key
+	// 2. The attestation key, and the DID document that must publish it with the coordinator
+	// service: without them agents cannot verify assignments, and PDSes deny every write to the
+	// managed spaces (their checkUserAccess call has nowhere to go)
+	const signer = await P256AttestationSigner.fromPrivateKeyHex(
+		attestationKeyHex,
+		attestationKeyId(coordinator, identity),
+	);
 	const didResolver = new IdResolver({ plcUrl: identity.plcUrl });
+	const published = await didResolver.did.resolve(coordinator, true);
+	const problems = identityProblems(published, identity, signer.publicDidKey());
+	if (problems.length > 0) {
+		throw new UnpublishedIdentityError(coordinator, problems);
+	}
+
+	// 3. Storage and network access
 	const stores = openSqliteStores(data, coordinator);
 	const gateway = new PdsGateway({
 		agent,
@@ -194,12 +217,8 @@ export async function main(
 		onError: (error) => console.error(error),
 	});
 	const authority = new PdsSpaceAuthority(agent);
-	const signer = await P256AttestationSigner.fromPrivateKeyHex(
-		attestationKeyHex,
-		attestationKeyId(coordinator, identity),
-	);
 
-	// 3. The services, the coordinator and its XRPC server
+	// 4. The services, the coordinator and its XRPC server
 	const services = selectServices({ coordinator, gateway, authority });
 	const running = await startCoordinator(
 		{ coordinator, gateway, stores, services, signer, clock: systemClock },
@@ -216,7 +235,7 @@ export async function main(
 	});
 	console.log(`Coordinator ${coordinator} listening on port ${server.port}`);
 
-	// 4. Stop cleanly on Ctrl+C or a stop signal
+	// 5. Stop cleanly on Ctrl+C or a stop signal
 	const shutDown = async () => {
 		await server.close();
 		await running.stop();

@@ -110,6 +110,10 @@ describe("XRPC server", () => {
 	});
 
 	test("checkUserAccess is answered for the coordinator's own PDS only", async () => {
+		// The rider must be an active requester; registering again changes nothing
+		const registration = await register(RIDER, { role: "requester" });
+		assert.equal(registration.status, 200);
+
 		const query = new URLSearchParams({
 			space: requestIntakeSpaceRef(COORDINATOR),
 			user: RIDER,
@@ -127,7 +131,6 @@ describe("XRPC server", () => {
 
 		const fromAuthority = await ask(COORDINATOR);
 		assert.equal(fromAuthority.status, 200);
-		// The rider registered in the first test
 		assert.deepEqual(fromAuthority.body, { authorized: true });
 	});
 });
