@@ -4,14 +4,16 @@ import { Secp256k1Keypair } from "@atproto/crypto";
 import { createMemoryStores } from "../../../core/coordinator/data/memory_stores.js";
 import { ManualClock } from "../../../core/coordinator/library/clock.js";
 import { CoordinatorApiHandlers } from "../../../core/coordinator/runtime/api_handlers.js";
+import { PublicIndexer } from "../../../core/coordinator/runtime/public_indexer.js";
 import {
 	type RunningXrpcServer,
 	startXrpcServer,
+	type XrpcServerOptions,
 } from "../../../core/coordinator/runtime/xrpc_server.js";
 import type { Did } from "../../../core/protocol/interfaces/internal/types.js";
 import { requestIntakeSpaceRef } from "../../../core/protocol/protocol_config/space_definition.js";
 import { epochSeconds, serviceJwt } from "../authentication/service_jwt.js";
-import { COORDINATOR, RIDER, START } from "../fixtures.js";
+import { COORDINATOR, FakeSpaceService, RIDER, START } from "../fixtures.js";
 
 // The coordinator's XRPC server over real HTTP: authentication, input checks, error mapping.
 
@@ -21,15 +23,20 @@ const CHECK_USER_ACCESS = "com.atproto.managedspace.checkUserAccess";
 let server: RunningXrpcServer;
 const keys = new Map<Did, Secp256k1Keypair>();
 
-before(async () => {
-	keys.set(RIDER, await Secp256k1Keypair.create());
-	keys.set(COORDINATOR, await Secp256k1Keypair.create());
-	const clock = new ManualClock(START);
-	server = await startXrpcServer({
+const clock = new ManualClock(START);
+
+function serverOptions(): XrpcServerOptions {
+	const stores = createMemoryStores(COORDINATOR);
+	return {
 		api: new CoordinatorApiHandlers({
 			coordinator: COORDINATOR,
-			stores: createMemoryStores(COORDINATOR),
+			stores,
 			gateway: { getRecord: async () => undefined },
+			indexer: new PublicIndexer({
+				gateway: { watchPublic: async () => () => {} },
+				publicIndex: stores.publicIndex,
+				spaces: new FakeSpaceService(),
+			}),
 			clock,
 		}),
 		coordinator: COORDINATOR,
@@ -38,7 +45,13 @@ before(async () => {
 		clock,
 		// Any free port
 		port: 0,
-	});
+	};
+}
+
+before(async () => {
+	keys.set(RIDER, await Secp256k1Keypair.create());
+	keys.set(COORDINATOR, await Secp256k1Keypair.create());
+	server = await startXrpcServer(serverOptions());
 });
 
 after(() => server.close());
@@ -101,6 +114,8 @@ describe("XRPC server", () => {
 		assert.equal(invalidInput.status, 400);
 		assert.equal(invalidInput.body.error, "InvalidRequest");
 
+		// The rider is a requester (registering again changes nothing), so operator conflicts
+		assert.equal((await register(RIDER, { role: "requester" })).status, 200);
 		const conflict = await register(RIDER, { role: "operator" });
 		assert.equal(conflict.status, 400);
 		assert.equal(conflict.body.error, "RoleConflict");
@@ -132,5 +147,28 @@ describe("XRPC server", () => {
 		const fromAuthority = await ask(COORDINATOR);
 		assert.equal(fromAuthority.status, 200);
 		assert.deepEqual(fromAuthority.body, { authorized: true });
+	});
+
+	test("the scheme name Bearer is matched in any case", async () => {
+		const token = await tokenFor(RIDER, REGISTER);
+		const response = await call(`/xrpc/${REGISTER}`, {
+			method: "POST",
+			headers: {
+				"content-type": "application/json",
+				authorization: `bearer ${token}`,
+			},
+			body: JSON.stringify({ role: "requester" }),
+		});
+		assert.equal(response.status, 200);
+	});
+
+	test("a port in use fails the start instead of crashing the process", async () => {
+		await assert.rejects(
+			startXrpcServer({ ...serverOptions(), port: server.port }),
+			(error: NodeJS.ErrnoException) => {
+				assert.equal(error.code, "EADDRINUSE");
+				return true;
+			},
+		);
 	});
 });

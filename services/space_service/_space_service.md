@@ -6,4 +6,6 @@ Placeholder. Carries out the coordinator's space operations through `SpaceServic
 | --- | --- |
 | `atproto_spaces.ts` | `AtprotoSpaces`: the operations on atproto Spaces, using the coordinator's `AtprotoGateway` and `SpaceAuthority`. |
 
+Every write must be idempotent: the coordinator repeats a write until it succeeds, also after a restart, so a second call with the same input must leave the same result and must not fail because the first one already succeeded (ADR-007).
+
 The space layout itself (space types, policies, addresses) is protocol and stays in `core/protocol/`.

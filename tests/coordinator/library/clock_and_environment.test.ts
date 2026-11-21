@@ -27,6 +27,23 @@ describe("manual clock", () => {
 		assert.deepEqual(clock.now(), at(6_000));
 		assert.equal(clock.pendingTimers, 0);
 	});
+
+	test("a timer for a moment already reached fires without another advance, once", async () => {
+		const clock = new ManualClock(START);
+		let fired = 0;
+		clock.setTimer(new Date(START.getTime() - 1_000), () => fired++);
+		assert.equal(fired, 0);
+		await Promise.resolve();
+		assert.equal(fired, 1);
+		clock.advanceBy(1_000);
+		assert.equal(fired, 1);
+
+		// Cancelled before the microtask runs: never fires
+		const cancel = clock.setTimer(START, () => fired++);
+		cancel();
+		await Promise.resolve();
+		assert.equal(fired, 1);
+	});
 });
 
 describe("secrets", () => {

@@ -43,12 +43,7 @@ export class PublicIndexer {
 	async start(): Promise<void> {
 		const { gateway, publicIndex, spaces } = this.dependencies;
 
-		// 1. Feed spaces of the feeds already indexed (creating one again changes nothing)
-		for (const feed of await publicIndex.listFeeds()) {
-			await spaces.setUpFeedSpace(feed.uri);
-		}
-
-		// 2. Follow the firehose
+		// 1. Follow the firehose first, so nothing written during the setup below is missed
 		this.stopWatching = await gateway.watchPublic(
 			[...INDEXED_COLLECTIONS],
 			(change) => {
@@ -57,6 +52,17 @@ export class PublicIndexer {
 					.catch(this.onError);
 			},
 		);
+
+		// 2. Feed spaces of the feeds already indexed. Creating a space again changes nothing, so
+		//    this may overlap with changes from the firehose. A failure stops the subscription again
+		try {
+			for (const feed of await publicIndex.listFeeds()) {
+				await spaces.setUpFeedSpace(feed.uri);
+			}
+		} catch (error) {
+			await this.stop();
+			throw error;
+		}
 	}
 
 	async stop(): Promise<void> {

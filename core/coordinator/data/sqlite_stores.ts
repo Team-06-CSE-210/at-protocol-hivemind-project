@@ -25,7 +25,7 @@ import type {
 	TaskId,
 } from "../../protocol/interfaces/internal/types.js";
 import type { DataConfig } from "../config/data_config.js";
-import { isEndPhase } from "../library/task_rules.js";
+import { END_PHASES } from "../library/task_rules.js";
 import { classifyPublicChange } from "./public_records.js";
 import { COORDINATOR_SCHEMA } from "./schema.js";
 
@@ -212,13 +212,19 @@ class SqliteTaskStore implements TaskStore {
 		});
 	}
 
+	// Not in an end phase, or with writes still owed. A record without the published field (stored
+	// before it existed) has NULL there and counts as published.
 	async listOpen(): Promise<TaskRecord[]> {
+		const endPhases = [...END_PHASES];
 		const rows = this.database
-			.prepare("SELECT phase, task FROM tasks ORDER BY task_id")
-			.all() as Row[];
-		return rows
-			.filter((row) => !isEndPhase(String(row.phase)))
-			.map((row) => fromJsonText<TaskRecord>(row.task));
+			.prepare(
+				`SELECT task FROM tasks
+				WHERE phase NOT IN (${endPhases.map(() => "?").join(", ")})
+					OR json_extract(task, '$.published') = 0
+				ORDER BY task_id`,
+			)
+			.all(...endPhases) as Row[];
+		return rows.map((row) => fromJsonText<TaskRecord>(row.task));
 	}
 }
 
@@ -339,23 +345,25 @@ class SqliteRevisionStore implements RevisionStore {
 class SqliteBillingStore implements BillingStore {
 	constructor(private readonly database: DatabaseSync) {}
 
-	async addAssignment(agent: Did, month: string): Promise<number> {
-		const row = this.database
+	async recordAssignment(
+		taskId: TaskId,
+		agent: Did,
+		month: string,
+	): Promise<void> {
+		this.database
 			.prepare(
-				`INSERT INTO billing_usage (agent, month, assignments) VALUES (?, ?, 1)
-				ON CONFLICT (agent, month) DO UPDATE SET assignments = assignments + 1
-				RETURNING assignments`,
+				`INSERT INTO billing_assignments (task_id, agent, month) VALUES (?, ?, ?)
+				ON CONFLICT (task_id) DO NOTHING`,
 			)
-			.get(agent, month) as Row;
-		return Number(row.assignments);
+			.run(taskId, agent, month);
 	}
 
 	async countAssignments(agent: Did, month: string): Promise<number> {
 		const row = this.database
 			.prepare(
-				"SELECT assignments FROM billing_usage WHERE agent = ? AND month = ?",
+				"SELECT COUNT(*) AS assignments FROM billing_assignments WHERE agent = ? AND month = ?",
 			)
-			.get(agent, month) as Row | undefined;
-		return row === undefined ? 0 : Number(row.assignments);
+			.get(agent, month) as Row;
+		return Number(row.assignments);
 	}
 }

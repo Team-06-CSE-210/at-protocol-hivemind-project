@@ -104,6 +104,7 @@ export function runStoresContract(
 				phase: "collecting",
 				updatedAt: "2026-11-19T12:00:00.000Z",
 			},
+			published: true,
 		});
 
 		test("a task is found by ID and by its request and offer records", () =>
@@ -160,6 +161,32 @@ export function runStoresContract(
 					stored?.assignment?.attestation.signature,
 					new Uint8Array([9, 8, 7]),
 				);
+			}));
+
+		test("listOpen keeps an ended task whose writes are still owed", () =>
+			withStores(async ({ tasks }) => {
+				const ended = task();
+				ended.state = { ...ended.state, phase: "noCoverage" };
+				ended.published = false;
+				await tasks.put(ended);
+				assert.deepEqual(
+					(await tasks.listOpen()).map((open) => open.taskId),
+					[taskId],
+				);
+
+				ended.published = true;
+				await tasks.put(ended);
+				assert.deepEqual(await tasks.listOpen(), []);
+			}));
+
+		test("an ended task stored without the published field counts as published", () =>
+			withStores(async ({ tasks }) => {
+				const { published: _published, ...older } = task();
+				await tasks.put({
+					...older,
+					state: { ...older.state, phase: "completed" },
+				} as TaskRecord);
+				assert.deepEqual(await tasks.listOpen(), []);
 			}));
 	});
 
@@ -220,12 +247,15 @@ export function runStoresContract(
 				assert.equal(await revisions.get(space, TAXI_ONE), undefined);
 			}));
 
-		test("assignments are counted per agent and month", () =>
+		test("assignments are counted per agent and month, each task once", () =>
 			withStores(async ({ billing }) => {
-				assert.equal(await billing.addAssignment(TAXI_ONE, "2026-11"), 1);
-				assert.equal(await billing.addAssignment(TAXI_ONE, "2026-11"), 2);
-				await billing.addAssignment(TAXI_ONE, "2026-12");
+				await billing.recordAssignment(taskIdFor("one"), TAXI_ONE, "2026-11");
+				await billing.recordAssignment(taskIdFor("two"), TAXI_ONE, "2026-11");
+				// The same task again, e.g. a repeated write: not counted twice
+				await billing.recordAssignment(taskIdFor("two"), TAXI_ONE, "2026-11");
+				await billing.recordAssignment(taskIdFor("three"), TAXI_ONE, "2026-12");
 				assert.equal(await billing.countAssignments(TAXI_ONE, "2026-11"), 2);
+				assert.equal(await billing.countAssignments(TAXI_ONE, "2026-12"), 1);
 				assert.equal(await billing.countAssignments(TAXI_TWO, "2026-11"), 0);
 			}));
 	});

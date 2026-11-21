@@ -39,6 +39,7 @@ import {
 	isEndPhase,
 	phaseAfterCollection,
 	respondBy,
+	retryDelayMs,
 	selectBy,
 	type TaskPhase,
 } from "../library/task_rules.js";
@@ -52,8 +53,12 @@ import type { BillingRuntime } from "./billing.js";
 //
 // Each task's steps run one after another (a queue per task), so an offer and the deadline that
 // closes its task never interleave. Changes to one intake record are queued by record too, so a
-// request deleted right after it was written still finds its task. Every step stores the task before it writes to a space, so
-// start() can resume open tasks after a restart.
+// request deleted right after it was written still finds its task.
+//
+// Every state change is stored first, marked as not yet published, and then published: the space
+// writes and billing the state implies, all idempotent (commit, sync, publish). Writes that fail
+// are tried again after a growing delay, and at the next start(), until they succeed. Deadlines
+// do not wait for the spaces.
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Types
@@ -79,6 +84,12 @@ interface RunningTask {
 	stopWatching?: () => void;
 }
 
+// A task whose writes failed: how often so far, and the timer of the next attempt
+interface PendingRetry {
+	failedAttempts: number;
+	cancel?: () => void;
+}
+
 type StoredOffer = TaskRecord["offers"][number];
 
 const REQUEST_COLLECTION = "com.hivemind-network.requester.request";
@@ -93,6 +104,8 @@ export class TaskRunner {
 	private readonly modules: ReadonlyMap<Nsid, AnyTaskTypeModule>;
 	private readonly onError: (error: unknown) => void;
 	private readonly running = new Map<TaskId, RunningTask>();
+	// Tasks whose writes are tried again; kept apart from running, as ended tasks may need it too
+	private readonly retries = new Map<TaskId, PendingRetry>();
 	// Queues by task ID, and by "author collection rkey" for intake records
 	private readonly queues = new Map<string, Promise<void>>();
 	private readonly stopIntakes: Array<() => void> = [];
@@ -113,7 +126,8 @@ export class TaskRunner {
 	async start(): Promise<void> {
 		const { stores, spaces } = this.dependencies;
 
-		// 1. Resume open tasks first, so intake records already handled find their task
+		// 1. Resume tasks with work left first, so intake records already handled find their task.
+		//    A task that fails to resume is tried again on its own; the others go on
 		for (const task of await stores.tasks.listOpen()) {
 			await this.enqueue(task.taskId, () => this.resume(task.taskId));
 		}
@@ -146,6 +160,10 @@ export class TaskRunner {
 		for (const taskId of [...this.running.keys()]) {
 			this.release(taskId);
 		}
+		for (const retry of this.retries.values()) {
+			retry.cancel?.();
+		}
+		this.retries.clear();
 		await Promise.allSettled([...this.queues.values()]);
 	}
 
@@ -244,7 +262,7 @@ export class TaskRunner {
 		requestRkey: string,
 		request: RequesterRequest,
 	): Promise<void> {
-		const { stores, spaces, router, clock } = this.dependencies;
+		const { stores, router, clock } = this.dependencies;
 		const { taskId } = request;
 
 		// 1. Only new tasks by active requesters; requests do not change once read
@@ -305,17 +323,11 @@ export class TaskRunner {
 			matchedFeeds: matchedFeeds.map((feed) => feed.uri),
 			offers: [],
 			state,
+			published: false,
 		};
-		await stores.tasks.put(task);
-		await spaces.createTaskSpace(taskId, requester);
-		await spaces.writeTaskState(taskId, state);
-		if (state.phase === "noCoverage") {
-			return;
-		}
 
-		// 5. Dispatch and wait for offers
-		await this.writeDispatches(task);
-		await this.follow(task);
+		// 5. Store and publish: task space, dispatches, state; then wait for offers until respondBy
+		await this.commit(task);
 	}
 
 	private async receiveOffer(
@@ -384,15 +396,13 @@ export class TaskRunner {
 
 	// respondBy passed, or every eligible agent answered
 	private async endCollection(taskId: TaskId): Promise<void> {
-		const { stores, spaces, matching, clock } = this.dependencies;
+		const { stores, matching, clock } = this.dependencies;
 		const task = await stores.tasks.get(taskId);
 		if (task?.state.phase !== "collecting") {
 			return;
 		}
+		// The dispatches are closed when the next phase is published
 		this.cancelTimer(taskId);
-		for (const feed of task.matchedFeeds) {
-			await spaces.closeDispatch(feed, taskId);
-		}
 
 		// 1. Rank the accepted offers; option IDs follow their order of arrival
 		const module = this.moduleOf(task);
@@ -461,9 +471,7 @@ export class TaskRunner {
 			options,
 			selectBy: l.toDatetimeString(selectBy(now, this.config)),
 		};
-		await stores.tasks.put(task);
-		await spaces.writeTaskState(taskId, task.state);
-		this.armTimer(task);
+		await this.commit(task);
 	}
 
 	// * * * * * * * * * * * * * * * * * *
@@ -471,7 +479,7 @@ export class TaskRunner {
 	// * * * * * * * * * * * * * * * * * *
 
 	private async assign(task: TaskRecord, winner: StoredOffer): Promise<void> {
-		const { stores, spaces, signer, billing, clock } = this.dependencies;
+		const { signer, clock } = this.dependencies;
 		const now = clock.now();
 
 		// 1. The signed assignment carries the exact request and the winner's terms
@@ -489,41 +497,28 @@ export class TaskRunner {
 			attestation: await signer.sign(unsigned),
 		};
 
-		// 2. Store and bill first; the space writes are repeated by resume() if they fail
+		// 2. Store and publish: billed once, the winner joins the task space with the assignment.
+		//    The task space watch then waits for its progress
 		task.assignment = assignment;
 		task.state = { ...taskState("assigned", now), assignedAgent: winner.agent };
-		await stores.tasks.put(task);
-		await billing.recordAssignment(winner.agent, now);
-
-		// 3. The winner joins the task space; the task space watch then waits for its progress
-		this.cancelTimer(task.taskId);
-		await spaces.assign(task.taskId, assignment);
-		await spaces.writeTaskState(task.taskId, task.state);
+		await this.commit(task);
 	}
 
 	private async finish(task: TaskRecord, phase: TaskPhase): Promise<void> {
-		const { stores, spaces, clock } = this.dependencies;
 		// An assigned agent stays named in the end phase
 		const { assignedAgent } = task.state;
 		task.state = {
-			...taskState(phase, clock.now()),
+			...taskState(phase, this.dependencies.clock.now()),
 			...(assignedAgent === undefined ? {} : { assignedAgent }),
 		};
-		await stores.tasks.put(task);
-		this.release(task.taskId);
-		await spaces.writeTaskState(task.taskId, task.state);
+		await this.commit(task);
 	}
 
+	// Publishing the end phase also closes the dispatches of a task still collecting
 	private async cancel(taskId: TaskId): Promise<void> {
-		const { stores, spaces } = this.dependencies;
-		const task = await stores.tasks.get(taskId);
+		const task = await this.dependencies.stores.tasks.get(taskId);
 		if (task === undefined || !canChangePhase(task.state.phase, "cancelled")) {
 			return;
-		}
-		if (task.state.phase === "collecting") {
-			for (const feed of task.matchedFeeds) {
-				await spaces.closeDispatch(feed, taskId);
-			}
 		}
 		await this.finish(task, "cancelled");
 	}
@@ -601,22 +596,119 @@ export class TaskRunner {
 	// Resuming after a restart
 	// * * * * * * * * * * * * * * * * * *
 
-	// Writes the stored state again (all writes are idempotent) and re-arms the deadline
+	// After a restart. A running task is published again in full (the writes are idempotent), so the
+	// spaces show it even if they lost a write; its deadline is re-armed and fires right away if it
+	// passed while the coordinator was down. An ended task gets only the writes it still owes
 	private async resume(taskId: TaskId): Promise<void> {
-		const { stores, spaces } = this.dependencies;
-		const task = await stores.tasks.get(taskId);
-		if (task === undefined || isEndPhase(task.state.phase)) {
+		const task = await this.dependencies.stores.tasks.get(taskId);
+		if (task === undefined) {
 			return;
 		}
+		if (isEndPhase(task.state.phase)) {
+			await this.sync(taskId);
+			return;
+		}
+		await this.commit(task);
+	}
+
+	// * * * * * * * * * * * * * * * * * *
+	// Publishing
+	// * * * * * * * * * * * * * * * * * *
+
+	// Every state change: stored as not yet published, the deadline re-armed (an end phase releases
+	// timer and watch instead), then published. The deadline does not wait for the spaces
+	private async commit(task: TaskRecord): Promise<void> {
+		task.published = false;
+		await this.dependencies.stores.tasks.put(task);
+		if (isEndPhase(task.state.phase)) {
+			this.release(task.taskId);
+		} else {
+			this.armTimer(task);
+		}
+		await this.sync(task.taskId);
+	}
+
+	// Publishes the stored task if that is still owed, and follows the task space while the task
+	// runs. A failure is reported and tried again later; the task also stays listed for start()
+	private async sync(taskId: TaskId): Promise<void> {
+		const { stores } = this.dependencies;
+		const task = await stores.tasks.get(taskId);
+		if (task === undefined || this.stopped) {
+			return;
+		}
+		try {
+			if (task.published === false) {
+				await this.publish(task);
+				task.published = true;
+				await stores.tasks.put(task);
+			}
+			if (!isEndPhase(task.state.phase)) {
+				await this.watch(task);
+			}
+			this.clearRetry(taskId);
+		} catch (error) {
+			this.onError(error);
+			this.scheduleRetry(taskId);
+		}
+	}
+
+	// What the spaces and billing must show for the stored task. Every write is idempotent, so a
+	// publish that failed halfway is simply repeated
+	private async publish(task: TaskRecord): Promise<void> {
+		const { spaces, billing } = this.dependencies;
+		const { taskId, state, assignment } = task;
+
+		// 1. The task space, with the requester as member
 		await spaces.createTaskSpace(taskId, task.requester);
-		if (task.state.phase === "collecting") {
+
+		// 2. The calls for offers: open while collecting, closed in every later phase
+		if (state.phase === "collecting") {
 			await this.writeDispatches(task);
+		} else {
+			for (const feed of task.matchedFeeds) {
+				await spaces.closeDispatch(feed, taskId);
+			}
 		}
-		if (task.state.phase === "assigned" && task.assignment !== undefined) {
-			await spaces.assign(taskId, task.assignment);
+
+		// 3. An assignment: billed once per task, in the month it was issued; the winner joins the
+		//    task space while the task is assigned
+		if (assignment !== undefined) {
+			await billing.recordAssignment(
+				taskId,
+				assignment.agent,
+				new Date(assignment.issuedAt),
+			);
+			if (state.phase === "assigned") {
+				await spaces.assign(taskId, assignment);
+			}
 		}
-		await spaces.writeTaskState(taskId, task.state);
-		await this.follow(task);
+
+		// 4. The state last: once the requester sees it, everything it implies is in place
+		await spaces.writeTaskState(taskId, state);
+	}
+
+	private scheduleRetry(taskId: TaskId): void {
+		if (this.stopped) {
+			return;
+		}
+		const { clock } = this.dependencies;
+		const retry = this.retries.get(taskId) ?? { failedAttempts: 0 };
+		retry.cancel?.();
+		retry.failedAttempts += 1;
+		const delayMs = retryDelayMs(retry.failedAttempts, this.config);
+		retry.cancel = clock.setTimer(
+			new Date(clock.now().getTime() + delayMs),
+			() => {
+				retry.cancel = undefined;
+				this.enqueue(taskId, () => this.sync(taskId)).catch(this.onError);
+			},
+		);
+		this.retries.set(taskId, retry);
+	}
+
+	private clearRetry(taskId: TaskId): void {
+		this.retries.get(taskId)?.cancel?.();
+		this.retries.delete(taskId);
 	}
 
 	// * * * * * * * * * * * * * * * * * *
@@ -640,26 +732,33 @@ export class TaskRunner {
 		}
 	}
 
-	// Watch the task space and arm the current deadline
-	private async follow(task: TaskRecord): Promise<void> {
+	// Follows the task space, once per run. The runner may stop, or the task end, while the watch
+	// is being set up; the new watch is then closed right away
+	private async watch(task: TaskRecord): Promise<void> {
+		const runningTask = this.runningTask(task.taskId);
+		if (runningTask.stopWatching !== undefined) {
+			return;
+		}
+		const stopWatching = await this.dependencies.spaces.watchTaskSpace(
+			task.taskId,
+			(change) => {
+				this.enqueue(task.taskId, () =>
+					this.onTaskSpaceChange(task.taskId, change),
+				).catch(this.onError);
+			},
+		);
+		if (this.stopped || this.running.get(task.taskId) !== runningTask) {
+			stopWatching();
+			return;
+		}
+		runningTask.stopWatching = stopWatching;
+	}
+
+	// Arms the current phase's deadline; nothing once the runner has stopped
+	private armTimer(task: TaskRecord): void {
 		if (this.stopped) {
 			return;
 		}
-		const runningTask = this.runningTask(task.taskId);
-		if (runningTask.stopWatching === undefined) {
-			runningTask.stopWatching = await this.dependencies.spaces.watchTaskSpace(
-				task.taskId,
-				(change) => {
-					this.enqueue(task.taskId, () =>
-						this.onTaskSpaceChange(task.taskId, change),
-					).catch(this.onError);
-				},
-			);
-		}
-		this.armTimer(task);
-	}
-
-	private armTimer(task: TaskRecord): void {
 		const {
 			phase,
 			respondBy: collectionDeadline,

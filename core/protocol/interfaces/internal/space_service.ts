@@ -16,6 +16,10 @@ import type {
 // The space layout itself (space types, policies, addresses, who writes which record) is part of
 // the protocol and lives in type_definition/ and protocol_config/. This interface only executes it;
 // the decisions (which feeds, who wins, when a deadline has passed) stay with the coordinator.
+//
+// The coordinator repeats a write until it succeeds, also after a restart (runtime/task_runner.ts).
+// Every method that creates or writes must therefore be idempotent: calling it again with the same
+// input leaves the same result and does not fail because the first call already succeeded.
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Space Service
@@ -51,7 +55,8 @@ export interface SpaceService {
 	// Write a task's call for offers into a feed space (record key: the task ID)
 	writeDispatch(feed: AtUri, dispatch: Dispatch): Promise<void>;
 
-	// Delete a task's dispatch from a feed space: the call for offers is over
+	// Delete a task's dispatch from a feed space: the call for offers is over. A dispatch that is
+	// already closed, or was never written, counts as closed
 	closeDispatch(feed: AtUri, taskId: TaskId): Promise<void>;
 
 	// * * * * * * * * * * * * * * * * * *

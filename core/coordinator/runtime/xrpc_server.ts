@@ -85,7 +85,14 @@ export async function startXrpcServer(
 			.then((body) => sendJson(response, 200, body))
 			.catch((error: unknown) => sendFailure(response, error));
 	});
-	await new Promise<void>((resolve) => server.listen(options.port, resolve));
+	// A port in use rejects here instead of surfacing as an unhandled "error" event
+	await new Promise<void>((resolve, reject) => {
+		server.once("error", reject);
+		server.listen(options.port, () => {
+			server.off("error", reject);
+			resolve();
+		});
+	});
 	return {
 		port: (server.address() as AddressInfo).port,
 		close: () =>

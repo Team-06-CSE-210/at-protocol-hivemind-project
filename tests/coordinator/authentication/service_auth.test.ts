@@ -101,7 +101,8 @@ describe("service auth", () => {
 	});
 
 	test("a token signed by another key is refused, even after refreshing the key", async () => {
-		const otherKey = await P256Keypair.create();
+		// Same key type as the rider's, so the signature itself is what fails
+		const otherKey = await Secp256k1Keypair.create();
 		await rejectsWith(
 			verify(await serviceJwt(otherKey, claims())),
 			"BadJwtSignature",
@@ -109,7 +110,6 @@ describe("service auth", () => {
 	});
 
 	test("a rotated key is fetched again once", async () => {
-		// Same key type as the new one: a key of another type fails before any refresh
 		const staleKey = await Secp256k1Keypair.create();
 		const lookups: boolean[] = [];
 		const resolveKey = async (_did: Did, forceRefresh: boolean) => {
@@ -117,6 +117,27 @@ describe("service auth", () => {
 			return forceRefresh ? riderKey.did() : staleKey.did();
 		};
 		const token = await serviceJwt(riderKey, claims());
+		assert.equal(
+			await verifyServiceAuth(
+				`Bearer ${token}`,
+				EXPECTATION,
+				resolveKey,
+				START,
+			),
+			RIDER,
+		);
+		assert.deepEqual(lookups, [false, true]);
+	});
+
+	test("a key rotated to another key type is fetched again too", async () => {
+		// The cached key cannot check a P-256 signature at all; that also leads to a fresh key
+		const newKey = await P256Keypair.create();
+		const lookups: boolean[] = [];
+		const resolveKey = async (_did: Did, forceRefresh: boolean) => {
+			lookups.push(forceRefresh);
+			return forceRefresh ? newKey.did() : riderKey.did();
+		};
+		const token = await serviceJwt(newKey, claims());
 		assert.equal(
 			await verifyServiceAuth(
 				`Bearer ${token}`,

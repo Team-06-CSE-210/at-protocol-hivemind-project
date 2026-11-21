@@ -24,6 +24,18 @@ export function monthOf(moment: Date): string {
 	return `${year}-${month}`;
 }
 
+// Whether an agent counts for a month: registered by the end of it. Months are "YYYY-MM", so
+// they compare as strings.
+export function isBilledForMonth(
+	registration: Registration,
+	month: string,
+): boolean {
+	return (
+		registration.role === "agent" &&
+		monthOf(new Date(registration.registeredAt)) <= month
+	);
+}
+
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Amounts
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~

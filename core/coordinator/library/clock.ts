@@ -41,7 +41,8 @@ export const systemClock: Clock = {
 // Manual Clock
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-// Time only moves when a test moves it; due timers then run in deadline order
+// Time only moves when a test moves it; due timers then run in deadline order. A timer set for a
+// moment already reached runs on the next microtask.
 export class ManualClock implements Clock {
 	private current: Date;
 	private readonly timers = new Map<
@@ -61,6 +62,15 @@ export class ManualClock implements Clock {
 	setTimer(at: Date, callback: () => void): () => void {
 		const timerId = this.nextTimerId++;
 		this.timers.set(timerId, { at: at.getTime(), callback });
+		// A deadline already reached fires right away (on the next microtask), as with the system
+		// clock, instead of waiting for the next advance
+		if (at.getTime() <= this.current.getTime()) {
+			queueMicrotask(() => {
+				if (this.timers.delete(timerId)) {
+					callback();
+				}
+			});
+		}
 		return () => {
 			this.timers.delete(timerId);
 		};

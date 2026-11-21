@@ -5,6 +5,7 @@ import { createMemoryStores } from "../../../core/coordinator/data/memory_stores
 import { ManualClock } from "../../../core/coordinator/library/clock.js";
 import { CoordinatorApiHandlers } from "../../../core/coordinator/runtime/api_handlers.js";
 import { BillingRuntime } from "../../../core/coordinator/runtime/billing.js";
+import { PublicIndexer } from "../../../core/coordinator/runtime/public_indexer.js";
 import { CoordinatorApiError } from "../../../core/protocol/interfaces/internal/coordinator_api.js";
 import type { CoordinatorStores } from "../../../core/protocol/interfaces/internal/stores.js";
 import type {
@@ -22,6 +23,7 @@ import {
 	COORDINATOR,
 	created,
 	DOWNTOWN_FEED,
+	FakeSpaceService,
 	FEED_OWNER,
 	feedDeclaration,
 	OPERATOR,
@@ -31,6 +33,7 @@ import {
 	START,
 	STRANGER,
 	TAXI_ONE,
+	TAXI_TWO,
 	taskIdFor,
 } from "../fixtures.js";
 
@@ -39,18 +42,25 @@ import {
 
 function setUp(publicRecords = new Map<AtUri, object>()) {
 	const stores: CoordinatorStores = createMemoryStores(COORDINATOR);
+	const spaces = new FakeSpaceService();
 	const api = new CoordinatorApiHandlers({
 		coordinator: COORDINATOR,
 		stores,
-		// Records in participants' repos that the index has not seen
+		// Records in participants' repos, as they are now
 		gateway: {
 			getRecord: async (uri) =>
 				publicRecords.get(uri) as TypedObject | undefined,
 		},
+		// The firehose is not used here; only apply() is
+		indexer: new PublicIndexer({
+			gateway: { watchPublic: async () => () => {} },
+			publicIndex: stores.publicIndex,
+			spaces,
+		}),
 		clock: new ManualClock(START),
 	});
 	const billing = new BillingRuntime(stores, DEFAULT_BILLING_CONFIG);
-	return { stores, api, billing, publicRecords };
+	return { stores, spaces, api, billing, publicRecords };
 }
 
 const PROFILE_URI =
@@ -115,6 +125,19 @@ describe("register", () => {
 			"InvalidRequest",
 		);
 	});
+
+	test("an agent whose profile is gone cannot be enrolled, even if the index still has it", async () => {
+		const { api, stores } = setUp();
+		await stores.participants.put(registration(OPERATOR, "operator"));
+		// The index saw the profile once; the agent has deleted it since (the repo has none)
+		await stores.publicIndex.apply(created(TAXI_ONE, "self", agentProfile()));
+
+		await rejectsWith(
+			api.register(OPERATOR, { role: "agent", subject: TAXI_ONE }),
+			"OperatorMismatch",
+		);
+		assert.equal(await stores.publicIndex.getAgentProfile(TAXI_ONE), undefined);
+	});
 });
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -144,6 +167,20 @@ describe("setFeedMember", () => {
 
 		await api.setFeedMember(FEED_OWNER, member);
 		assert.equal(await stores.feedMembers.isAllowed(PRIVATE_FEED, RIDER), true);
+	});
+
+	test("a feed read from its owner's repo is indexed with its feed space", async () => {
+		const { api, stores, spaces, publicRecords } = setUp();
+		publicRecords.set(PRIVATE_FEED, feedDeclaration("private"));
+		await stores.participants.put(registration(RIDER, "requester"));
+
+		await api.setFeedMember(FEED_OWNER, {
+			feed: PRIVATE_FEED,
+			subject: RIDER,
+			allowed: true,
+		});
+		assert.ok(await stores.publicIndex.getFeed(PRIVATE_FEED));
+		assert.ok(spaces.feedSpaces.has(PRIVATE_FEED));
 	});
 });
 
@@ -274,9 +311,25 @@ describe("billing runtime", () => {
 		await stores.participants.put(registration(OPERATOR, "operator"));
 		await stores.participants.put(registration(TAXI_ONE, "agent"));
 		for (let assignment = 0; assignment < 1_001; assignment++) {
-			await billing.recordAssignment(TAXI_ONE, START);
+			await billing.recordAssignment(
+				taskIdFor(`task${assignment}`),
+				TAXI_ONE,
+				START,
+			);
 		}
 		// $9.00 + 1 extra assignment at $2.00 per 1,000, rounded up to a cent
 		assert.equal(await billing.operatorChargeMinor(OPERATOR, "2026-11"), 901);
+	});
+
+	test("an agent registered after a month is not charged for it", async () => {
+		const { stores, billing } = setUp();
+		await stores.participants.put(registration(OPERATOR, "operator"));
+		await stores.participants.put(registration(TAXI_ONE, "agent"));
+		await stores.participants.put({
+			...registration(TAXI_TWO, "agent"),
+			registeredAt: "2026-12-01T09:00:00.000Z",
+		});
+		assert.equal(await billing.operatorChargeMinor(OPERATOR, "2026-11"), 900);
+		assert.equal(await billing.operatorChargeMinor(OPERATOR, "2026-12"), 1800);
 	});
 });

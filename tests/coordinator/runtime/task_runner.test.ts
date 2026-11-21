@@ -410,3 +410,199 @@ describe("task runner: failed start", () => {
 		assert.equal(spaces.watchedIntakes(), 0);
 	});
 });
+
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+// Failed writes
+// ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+describe("task runner: failed writes", () => {
+	const RETRY_MS = DEFAULT_TASKS_CONFIG.firstRetryDelayMs;
+
+	const progress = (status: string) => ({
+		$type: "com.hivemind-network.agent.progress",
+		status,
+		createdAt: "2026-11-19T12:10:00.000Z",
+	});
+
+	// A task assigned to TAXI_ONE (TAXI_TWO declines, so collection ends at once)
+	async function assignedTask(harness: Harness, name: string) {
+		const taskId = taskIdFor(name);
+		harness.spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		harness.spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 300)));
+		harness.spaces.pushOffer(created(TAXI_TWO, "o2", decline(taskId)));
+		await harness.runner.settled();
+		return taskId;
+	}
+
+	test("an end phase that fails to publish is retried until the requester sees it", async () => {
+		const harness = await seededHarness();
+		const taskId = await assignedTask(harness, "endretry");
+		assert.equal(harness.spaces.phaseOf(taskId), "assigned");
+
+		harness.spaces.failNext("writeTaskState");
+		harness.spaces.pushTaskSpace(
+			taskId,
+			created(TAXI_ONE, "p1", progress("completed")),
+		);
+		await harness.runner.settled();
+		assert.equal(harness.errors.length, 1);
+		assert.equal(harness.spaces.phaseOf(taskId), "assigned");
+		assert.equal((await harness.stores.tasks.get(taskId))?.published, false);
+
+		await advance(harness, RETRY_MS);
+		assert.equal(harness.spaces.phaseOf(taskId), "completed");
+		assert.equal((await harness.stores.tasks.get(taskId))?.published, true);
+		assert.equal(harness.clock.pendingTimers, 0);
+	});
+
+	test("noCoverage is published even if the task space cannot be created at first, also after a restart", async () => {
+		const stores = createMemoryStores(COORDINATOR);
+		await stores.participants.put({
+			subject: RIDER,
+			role: "requester",
+			status: "active",
+			registeredAt: "2026-11-19T12:00:00.000Z",
+		});
+		const first = await startHarness(stores);
+		const taskId = taskIdFor("nocoverageretry");
+		first.spaces.failNext("createTaskSpace");
+		first.spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		await first.runner.settled();
+		assert.equal(first.errors.length, 1);
+		assert.equal(first.spaces.phaseOf(taskId), undefined);
+
+		// The coordinator stops before the retry; the next start publishes the ended task
+		await first.runner.stop();
+		assert.equal(first.clock.pendingTimers, 0);
+		const second = await startHarness(
+			stores,
+			new FakeSpaceService(),
+			first.clock,
+		);
+		await settle(second);
+		assert.equal(second.spaces.taskSpaces.get(taskId), RIDER);
+		assert.equal(second.spaces.phaseOf(taskId), "noCoverage");
+	});
+
+	test("a selection phase that fails to publish still expires at selectBy", async () => {
+		const harness = await seededHarness();
+		const taskId = taskIdFor("selectretry");
+		harness.spaces.pushRequest(
+			created(RIDER, "r1", rideRequest(taskId, "choose")),
+		);
+		await harness.runner.settled();
+
+		harness.spaces.failNext("writeTaskState");
+		harness.spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 300)));
+		harness.spaces.pushOffer(created(TAXI_TWO, "o2", rideOffer(taskId, 120)));
+		await harness.runner.settled();
+		assert.equal(harness.errors.length, 1);
+		assert.equal(harness.spaces.phaseOf(taskId), "collecting");
+		assert.equal(
+			(await harness.stores.tasks.get(taskId))?.state.phase,
+			"awaitingSelection",
+		);
+
+		// The retry shows the options; the deadline was armed regardless
+		await advance(harness, DEFAULT_TASKS_CONFIG.selectionWindowMs);
+		const phases = harness.spaces.states.get(taskId)?.map(({ phase }) => phase);
+		assert.deepEqual(phases, ["collecting", "awaitingSelection", "expired"]);
+	});
+
+	test("a dispatch that fails to close does not stop the assignment, and is closed later", async () => {
+		const harness = await seededHarness();
+		const taskId = taskIdFor("closeretry");
+		harness.spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		await harness.runner.settled();
+
+		harness.spaces.failNext("closeDispatch");
+		harness.spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 300)));
+		harness.spaces.pushOffer(created(TAXI_TWO, "o2", rideOffer(taskId, 120)));
+		await harness.runner.settled();
+		assert.equal(harness.errors.length, 1);
+		assert.equal(
+			(await harness.stores.tasks.get(taskId))?.state.phase,
+			"assigned",
+		);
+
+		await advance(harness, RETRY_MS);
+		assert.equal(harness.spaces.phaseOf(taskId), "assigned");
+		assert.equal(harness.spaces.assignments.get(taskId)?.agent, TAXI_TWO);
+		assert.equal(harness.spaces.dispatches.size, 0);
+	});
+
+	test("a task that fails to resume is retried on its own; the others resume", async () => {
+		const first = await seededHarness();
+		const one = taskIdFor("resumeone");
+		const two = taskIdFor("resumetwo");
+		first.spaces.pushRequest(created(RIDER, "r1", rideRequest(one)));
+		first.spaces.pushRequest(created(RIDER, "r2", rideRequest(two)));
+		await settle(first);
+		await first.runner.stop();
+
+		const spaces = new FakeSpaceService();
+		spaces.failNext("createTaskSpace");
+		const second = await startHarness(first.stores, spaces, first.clock);
+		await second.runner.settled();
+		assert.equal(second.errors.length, 1);
+		assert.equal(spaces.taskSpaces.size, 1);
+
+		await advance(second, RETRY_MS);
+		assert.equal(spaces.phaseOf(one), "collecting");
+		assert.equal(spaces.phaseOf(two), "collecting");
+		assert.ok(spaces.dispatches.has(`${DOWNTOWN_FEED} ${one}`));
+		assert.ok(spaces.dispatches.has(`${DOWNTOWN_FEED} ${two}`));
+	});
+
+	test("an assignment is billed exactly once, after a billing failure and after a restart", async () => {
+		const stores = createMemoryStores(COORDINATOR);
+		await seedParticipants(stores);
+		const { billing } = stores;
+		let billingFailures = 1;
+		stores.billing = {
+			recordAssignment: async (taskId, agent, month) => {
+				if (billingFailures > 0) {
+					billingFailures -= 1;
+					throw new Error("billing store unreachable (test)");
+				}
+				return billing.recordAssignment(taskId, agent, month);
+			},
+			countAssignments: (agent, month) =>
+				billing.countAssignments(agent, month),
+		};
+		const first = await startHarness(stores);
+		const taskId = await assignedTask(first, "billonce");
+		assert.equal(first.errors.length, 1);
+		assert.equal(await billing.countAssignments(TAXI_ONE, monthOf(START)), 0);
+
+		await advance(first, RETRY_MS);
+		assert.equal(first.spaces.phaseOf(taskId), "assigned");
+		assert.equal(await billing.countAssignments(TAXI_ONE, monthOf(START)), 1);
+
+		// A restart publishes the running task again; billing does not count it twice
+		await first.runner.stop();
+		const second = await startHarness(
+			stores,
+			new FakeSpaceService(),
+			first.clock,
+		);
+		await settle(second);
+		assert.equal(second.spaces.assignments.get(taskId)?.agent, TAXI_ONE);
+		assert.equal(await billing.countAssignments(TAXI_ONE, monthOf(START)), 1);
+	});
+
+	test("a task space watch that is set up while the runner stops is closed", async () => {
+		const harness = await seededHarness();
+		const taskId = taskIdFor("watchstop");
+		const releaseWatches = harness.spaces.holdWatches();
+		harness.spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		// Let the task reach the held watch
+		await new Promise((resolve) => setImmediate(resolve));
+
+		const stopping = harness.runner.stop();
+		releaseWatches();
+		await stopping;
+		assert.equal(harness.spaces.isWatched(taskId), false);
+		assert.equal(harness.clock.pendingTimers, 0);
+	});
+});

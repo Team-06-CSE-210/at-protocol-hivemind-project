@@ -62,11 +62,12 @@ CREATE TABLE IF NOT EXISTS sync_cursors (
 	PRIMARY KEY (space, writer)
 );
 
--- Assignments per agent and month (BillingStore)
-CREATE TABLE IF NOT EXISTS billing_usage (
+-- Assignments, one row per task, counted per agent and month (BillingStore). One row per task makes
+-- recording idempotent. Databases from before keep an unused billing_usage table.
+CREATE TABLE IF NOT EXISTS billing_assignments (
+	task_id TEXT PRIMARY KEY,
 	agent TEXT NOT NULL,
-	month TEXT NOT NULL,
-	assignments INTEGER NOT NULL,
-	PRIMARY KEY (agent, month)
+	month TEXT NOT NULL
 );
+CREATE INDEX IF NOT EXISTS billing_assignments_by_agent_month ON billing_assignments (agent, month);
 `;

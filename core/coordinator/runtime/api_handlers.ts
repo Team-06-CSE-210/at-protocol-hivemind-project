@@ -1,6 +1,8 @@
 import { l } from "@atproto/lex";
-import * as hivemind from "../../protocol/generated/com/hivemind-network.js";
-import type { AtprotoGateway } from "../../protocol/interfaces/internal/atproto_gateway.js";
+import type {
+	AtprotoGateway,
+	RecordChange,
+} from "../../protocol/interfaces/internal/atproto_gateway.js";
 import type {
 	AccessKind,
 	CoordinatorApi,
@@ -38,6 +40,7 @@ import {
 	decideRegistration,
 } from "../library/registration_rules.js";
 import { collectFeedEligibility } from "./access_checks.js";
+import type { PublicIndexer } from "./public_indexer.js";
 
 // The coordinator's answers to the three methods it serves (CoordinatorApi). The caller is already
 // verified (xrpc_server.ts or the in-memory network); the decisions are in library/.
@@ -45,8 +48,11 @@ import { collectFeedEligibility } from "./access_checks.js";
 export interface ApiHandlerDependencies {
 	coordinator: Did;
 	stores: CoordinatorStores;
-	// Reads public records the index has not seen yet; the firehose only delivers new changes
+	// Reads public records straight from their repos; the firehose only delivers new changes
 	gateway: Pick<AtprotoGateway, "getRecord">;
+	// What is read fresh goes into the index the same way firehose changes do: validated, and a
+	// feed gets its feed space
+	indexer: Pick<PublicIndexer, "apply">;
 	clock: Clock;
 }
 
@@ -191,32 +197,32 @@ export class CoordinatorApiHandlers implements CoordinatorApi {
 		return found === undefined ? undefined : publicIndex.getFeed(found);
 	}
 
-	// The agent's profile straight from its repo, so a registration never waits for the firehose;
-	// the index is updated on the way
+	// The agent's profile straight from its repo, so a registration never waits for the firehose.
+	// A missing or invalid profile counts as none: an older copy in the index must not stand in
+	// for a profile the agent has since withdrawn.
 	private async readAgentProfile(
 		agent: Did,
 	): Promise<AgentProfile | undefined> {
-		const { gateway, stores } = this.dependencies;
+		const { gateway, indexer, stores } = this.dependencies;
 		const record = await gateway.getRecord(
 			`at://${agent}/${AGENT_PROFILE_COLLECTION}/${PROFILE_RKEY}`,
 		);
-		const parsed = hivemind.agent.profile.main.safeParse(record);
-		if (!parsed.success) {
-			return stores.publicIndex.getAgentProfile(agent);
-		}
-		await stores.publicIndex.apply({
-			action: "update",
+		const location: Omit<RecordChange, "action" | "record"> = {
 			author: agent,
 			collection: AGENT_PROFILE_COLLECTION,
 			rkey: PROFILE_RKEY,
-			record: l.asUnknown$TypedObject(parsed.value),
-		});
-		return parsed.value;
+		};
+		await indexer.apply(
+			record === undefined
+				? { ...location, action: "delete" }
+				: { ...location, action: "update", record },
+		);
+		return stores.publicIndex.getAgentProfile(agent);
 	}
 
 	// A feed from the index, or from its owner's repo if the index has not seen it
 	private async readFeed(feed: AtUri): Promise<IndexedFeed | undefined> {
-		const { gateway, stores } = this.dependencies;
+		const { gateway, indexer, stores } = this.dependencies;
 		const indexed = await stores.publicIndex.getFeed(feed);
 		if (indexed !== undefined) {
 			return indexed;
@@ -225,20 +231,18 @@ export class CoordinatorApiHandlers implements CoordinatorApi {
 		if (collection !== FEED_DECLARATION_COLLECTION || rkey === undefined) {
 			return undefined;
 		}
-		const parsed = hivemind.feed.declaration.main.safeParse(
-			await gateway.getRecord(feed),
-		);
-		if (!parsed.success) {
+		const record = await gateway.getRecord(feed);
+		if (record === undefined) {
 			return undefined;
 		}
-		await stores.publicIndex.apply({
+		await indexer.apply({
 			action: "update",
 			author: owner as Did,
 			collection: FEED_DECLARATION_COLLECTION,
 			rkey,
-			record: l.asUnknown$TypedObject(parsed.value),
+			record,
 		});
-		// The index keeps only feeds that name this coordinator
+		// The index keeps only valid feeds that name this coordinator
 		return stores.publicIndex.getFeed(feed);
 	}
 }

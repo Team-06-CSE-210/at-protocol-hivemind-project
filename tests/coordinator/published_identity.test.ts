@@ -19,6 +19,7 @@ import {
 	main,
 } from "../../core/coordinator/main.js";
 import { CoordinatorApiHandlers } from "../../core/coordinator/runtime/api_handlers.js";
+import { PublicIndexer } from "../../core/coordinator/runtime/public_indexer.js";
 import {
 	type RunningXrpcServer,
 	startXrpcServer,
@@ -42,7 +43,7 @@ import {
 	SPACE_TYPES,
 } from "../../core/protocol/protocol_config/space_definition.js";
 import { eventually, loadPolicy } from "../gateway/gateway_contract.js";
-import { rideRequest, taskIdFor } from "./fixtures.js";
+import { FakeSpaceService, rideRequest, taskIdFor } from "./fixtures.js";
 
 // The coordinator's DID entries on a real PDS and PLC directory (@atproto/dev-env, frozen Spaces
 // alpha): the coordinator refuses to start without them, and with them the PDS reaches the
@@ -152,10 +153,16 @@ describe("coordinator identity: published with a PLC update", () => {
 		didResolver = new IdResolver({ plcUrl: local.plcUrl });
 
 		// 1. The coordinator's XRPC server, recording each access decision it makes
+		const stores = createMemoryStores(coordinator);
 		const handlers = new CoordinatorApiHandlers({
 			coordinator,
-			stores: createMemoryStores(coordinator),
+			stores,
 			gateway: { getRecord: async () => undefined },
+			indexer: new PublicIndexer({
+				gateway: { watchPublic: async () => () => {} },
+				publicIndex: stores.publicIndex,
+				spaces: new FakeSpaceService(),
+			}),
 			clock: systemClock,
 		});
 		const api: CoordinatorApi = {

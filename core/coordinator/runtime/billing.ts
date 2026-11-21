@@ -2,9 +2,11 @@ import type { CoordinatorStores } from "../../protocol/interfaces/internal/store
 import type {
 	Did,
 	Registration,
+	TaskId,
 } from "../../protocol/interfaces/internal/types.js";
 import type { BillingConfig } from "../config/billing_config.js";
 import {
+	isBilledForMonth,
 	monthlyChargeMinor,
 	monthOf,
 	type PaymentEvent,
@@ -25,17 +27,22 @@ export class BillingRuntime {
 		private readonly config: BillingConfig,
 	) {}
 
-	// Called once per assignment; returns the agent's count for that month
-	recordAssignment(agent: Did, at: Date): Promise<number> {
-		return this.stores.billing.addAssignment(agent, monthOf(at));
+	// Counts a task's assignment in the month it was issued; repeating it for the same task
+	// changes nothing (the task runner repeats it until its writes succeed)
+	recordAssignment(taskId: TaskId, agent: Did, issuedAt: Date): Promise<void> {
+		return this.stores.billing.recordAssignment(
+			taskId,
+			agent,
+			monthOf(issuedAt),
+		);
 	}
 
-	// What an operator owes for a month (YYYY-MM): every agent it operates, in minor units of
-	// config.currency
+	// What an operator owes for a month (YYYY-MM): every agent it operates that was registered by
+	// the end of that month, in minor units of config.currency
 	async operatorChargeMinor(operator: Did, month: string): Promise<number> {
 		const { billing, participants } = this.stores;
 		const agents = (await participants.listByOperator(operator)).filter(
-			(registration) => registration.role === "agent",
+			(registration) => isBilledForMonth(registration, month),
 		);
 		let totalMinor = 0;
 		for (const { subject } of agents) {

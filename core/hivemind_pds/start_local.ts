@@ -46,12 +46,18 @@ export async function startLocalHivemindPds(
 	const network = await TestNetworkNoAppView.create({});
 
 	// 2. The coordinator's account, with the password the coordinator will log in with
+	//    If that fails, the PDS and PLC directory stop again
 	const agent = new AtpAgent({ service: network.pds.url });
-	await agent.createAccount({
-		handle: LOCAL_COORDINATOR_HANDLE,
-		email: "coordinator@test.invalid",
-		password: coordinatorPassword,
-	});
+	try {
+		await agent.createAccount({
+			handle: LOCAL_COORDINATOR_HANDLE,
+			email: "coordinator@test.invalid",
+			password: coordinatorPassword,
+		});
+	} catch (error) {
+		await network.close();
+		throw error;
+	}
 	const coordinatorDid = agent.assertDid;
 
 	// 3. Publishing the DID entries: a PLC update, as dev-env's own service-profile.ts makes one
@@ -106,9 +112,14 @@ async function runFromCommandLine(): Promise<void> {
 	const attestationKey = await P256Keypair.import(attestationKeyHex);
 	const serviceUrl = `http://localhost:${DEFAULT_RUNTIME_CONFIG.xrpcPort}`;
 
-	// 2. PDS, account and DID entries
+	// 2. PDS, account and DID entries; a failed publish stops the PDS again
 	const local = await startLocalHivemindPds(accountPassword);
-	await local.publishCoordinatorIdentity(attestationKey.did(), serviceUrl);
+	try {
+		await local.publishCoordinatorIdentity(attestationKey.did(), serviceUrl);
+	} catch (error) {
+		await local.close();
+		throw error;
+	}
 
 	// 3. What the coordinator's identity config needs to point at this PDS
 	console.log(`PDS:         ${local.pdsUrl}`);

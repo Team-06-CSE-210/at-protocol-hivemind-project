@@ -125,7 +125,10 @@ class MemoryTaskStore implements TaskStore {
 
 	async listOpen(): Promise<TaskRecord[]> {
 		return [...this.tasks.values()]
-			.filter((task) => !isEndPhase(task.state.phase))
+			.filter(
+				// Records without the field count as published
+				(task) => !isEndPhase(task.state.phase) || task.published === false,
+			)
 			.map((task) => structuredClone(task));
 	}
 }
@@ -215,15 +218,26 @@ class MemoryRevisionStore implements RevisionStore {
 }
 
 class MemoryBillingStore implements BillingStore {
-	private readonly assignments = new Map<string, number>();
+	// Task ID -> "agent month" it was billed to
+	private readonly assignments = new Map<TaskId, string>();
 
-	async addAssignment(agent: Did, month: string): Promise<number> {
-		const count = (this.assignments.get(`${agent} ${month}`) ?? 0) + 1;
-		this.assignments.set(`${agent} ${month}`, count);
-		return count;
+	async recordAssignment(
+		taskId: TaskId,
+		agent: Did,
+		month: string,
+	): Promise<void> {
+		if (!this.assignments.has(taskId)) {
+			this.assignments.set(taskId, `${agent} ${month}`);
+		}
 	}
 
 	async countAssignments(agent: Did, month: string): Promise<number> {
-		return this.assignments.get(`${agent} ${month}`) ?? 0;
+		let count = 0;
+		for (const billedTo of this.assignments.values()) {
+			if (billedTo === `${agent} ${month}`) {
+				count += 1;
+			}
+		}
+		return count;
 	}
 }

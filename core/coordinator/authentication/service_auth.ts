@@ -3,8 +3,12 @@ import { l } from "@atproto/lex";
 import type { Did, Nsid } from "../../protocol/interfaces/internal/types.js";
 
 // Verifies the atproto service-auth JWT on every call to the coordinator and returns the caller.
-// Same checks as verifyJwt in @atproto/xrpc-server (src/auth.ts), with two differences: the clock
-// is passed in, and both audiences the coordinator is called with are accepted.
+// Same checks as verifyJwt in @atproto/xrpc-server (src/auth.ts), with these differences:
+// -> the clock is passed in
+// -> both audiences the coordinator is called with are accepted
+// -> a cached key that cannot check the signature at all (another key type after a rotation)
+//    leads to a fresh key, like a key that does not match
+// -> the Bearer scheme is matched in any case, as HTTP auth schemes are (RFC 9110, 11.1)
 //
 // Who calls with which audience:
 // -> participants, through their PDS (atproto-proxy header): aud = the coordinator's DID
@@ -105,6 +109,7 @@ export async function verifyServiceAuth(
 		`${encodedHeader}.${encodedPayload}`,
 	);
 	const signature = Buffer.from(encodedSignature, "base64url");
+	// A key that cannot check this signature (e.g. another key type) is no match either
 	const verifyWith = async (didKey: string) => {
 		try {
 			return await verifySignature(didKey, signedBytes, signature, {
@@ -112,10 +117,7 @@ export async function verifyServiceAuth(
 				allowMalleableSig: true,
 			});
 		} catch {
-			throw new ServiceAuthError(
-				"BadJwtSignature",
-				"Could not verify JWT signature",
-			);
+			return false;
 		}
 	};
 	const cachedKey = await resolveSigningKey(caller, false);
@@ -136,12 +138,15 @@ export async function verifyServiceAuth(
 // Parsing
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+// "Bearer <token>", the scheme in any case
+const BEARER_PATTERN = /^bearer\s+(\S+)\s*$/i;
+
 function bearerToken(authorization: string | undefined): string {
-	const prefix = "Bearer ";
-	if (authorization === undefined || !authorization.startsWith(prefix)) {
+	const token = authorization?.match(BEARER_PATTERN)?.[1];
+	if (token === undefined) {
 		throw new ServiceAuthError("AuthMissing", "Authentication required");
 	}
-	return authorization.slice(prefix.length).trim();
+	return token;
 }
 
 function decodeJson(encoded: string): unknown {

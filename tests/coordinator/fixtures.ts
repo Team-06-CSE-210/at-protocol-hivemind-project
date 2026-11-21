@@ -216,6 +216,10 @@ export class FakeSpaceService implements SpaceService {
 	private readonly requestListeners = new Set<ChangeListener>();
 	private readonly offerListeners = new Set<ChangeListener>();
 	private readonly taskListeners = new Map<TaskId, Set<ChangeListener>>();
+	// Calls still to fail, by method (failNext)
+	private readonly failures = new Map<string, number>();
+	// While set, watchTaskSpace waits for it before subscribing (holdWatches)
+	private watchGate?: Promise<void>;
 
 	async setUpIntakes(): Promise<void> {
 		this.intakesSetUp = true;
@@ -232,29 +236,35 @@ export class FakeSpaceService implements SpaceService {
 	}
 
 	async setUpFeedSpace(feed: AtUri): Promise<SpaceRef> {
+		this.failIfAsked("setUpFeedSpace");
 		this.feedSpaces.add(feed);
 		return `at://${COORDINATOR}/space/com.hivemind-network.space.feed/${feed.length}`;
 	}
 
 	async writeDispatch(feed: AtUri, dispatch: Dispatch): Promise<void> {
+		this.failIfAsked("writeDispatch");
 		this.dispatches.set(`${feed} ${dispatch.taskId}`, dispatch);
 	}
 
 	async closeDispatch(feed: AtUri, taskId: TaskId): Promise<void> {
+		this.failIfAsked("closeDispatch");
 		this.dispatches.delete(`${feed} ${taskId}`);
 		this.closedDispatches.push(`${feed} ${taskId}`);
 	}
 
 	async createTaskSpace(taskId: TaskId, requester: Did): Promise<SpaceRef> {
+		this.failIfAsked("createTaskSpace");
 		this.taskSpaces.set(taskId, requester);
 		return taskSpaceRef(COORDINATOR, taskId);
 	}
 
 	async writeTaskState(taskId: TaskId, state: TaskState): Promise<void> {
+		this.failIfAsked("writeTaskState");
 		this.states.set(taskId, [...(this.states.get(taskId) ?? []), state]);
 	}
 
 	async assign(taskId: TaskId, assignment: Assignment): Promise<void> {
+		this.failIfAsked("assign");
 		this.assignments.set(taskId, assignment);
 	}
 
@@ -262,6 +272,8 @@ export class FakeSpaceService implements SpaceService {
 		taskId: TaskId,
 		onChange: ChangeListener,
 	): Promise<() => void> {
+		this.failIfAsked("watchTaskSpace");
+		await this.watchGate;
 		const listeners =
 			this.taskListeners.get(taskId) ?? new Set<ChangeListener>();
 		listeners.add(onChange);
@@ -270,6 +282,31 @@ export class FakeSpaceService implements SpaceService {
 	}
 
 	// * * * Test controls * * *
+
+	// The next `times` calls to a method throw, as a space host that cannot be reached would
+	failNext(method: keyof SpaceService, times = 1): void {
+		this.failures.set(method, (this.failures.get(method) ?? 0) + times);
+	}
+
+	// watchTaskSpace waits until the returned function is called
+	holdWatches(): () => void {
+		let release = () => {};
+		this.watchGate = new Promise<void>((resolve) => {
+			release = () => {
+				this.watchGate = undefined;
+				resolve();
+			};
+		});
+		return release;
+	}
+
+	private failIfAsked(method: keyof SpaceService): void {
+		const remaining = this.failures.get(method) ?? 0;
+		if (remaining > 0) {
+			this.failures.set(method, remaining - 1);
+			throw new Error(`${method} failed (test)`);
+		}
+	}
 
 	pushRequest(change: RecordChange): void {
 		for (const listener of this.requestListeners) {

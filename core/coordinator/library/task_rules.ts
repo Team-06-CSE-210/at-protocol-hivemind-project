@@ -20,7 +20,7 @@ export type TaskPhase =
 	| "expired";
 
 // Once a task reaches one of these, nobody writes to its space any more
-const END_PHASES: ReadonlySet<string> = new Set<TaskPhase>([
+export const END_PHASES: ReadonlySet<string> = new Set<TaskPhase>([
 	"completed",
 	"failed",
 	"cancelled",
@@ -93,6 +93,19 @@ export function respondBy(
 					Math.min(longestWindowMs, maxWaitMs),
 				);
 	return new Date(dispatchedAt.getTime() + windowMs);
+}
+
+// Delay before the next attempt at writes that failed: doubling from firstRetryDelayMs, at most
+// maxRetryDelayMs. failedAttempts counts the failures so far (1 after the first)
+export function retryDelayMs(
+	failedAttempts: number,
+	config: TasksConfig,
+): number {
+	const exponent = Math.max(0, failedAttempts - 1);
+	return Math.min(
+		config.maxRetryDelayMs,
+		config.firstRetryDelayMs * 2 ** exponent,
+	);
 }
 
 // selectBy = ranking time + the selection window (choose mode)

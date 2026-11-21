@@ -145,3 +145,26 @@ The managed spaces name `<coordinator DID>#hivemind_coordinator` as their managi
 - PDSes cache DID documents: a refresh starts after an hour and an entry is kept at most a day (PDS defaults `didCacheStaleTTL` and `didCacheMaxTTL`). A republished document can take that long to reach them.
 - The dev-env PLC directory serves P-256 keys in the older `EcdsaSecp256r1VerificationKey2019` encoding, did:web and plc.directory as `Multikey`. The check compares did:keys, so both pass.
 - The did:web account itself is created once by hand, with a bootstrap key (`core/hivemind_pds/_hivemind_pds.md`).
+
+## ADR-007: Task writes are stored first and retried until they succeed
+
+Date: 2026-11-21. Status: accepted.
+
+### Context
+
+The task runner stored each step and then wrote to the spaces, but a failed space write was only repeated at the next restart, and an end phase not even then. The requester could keep seeing `assigned` after the ride had ended. A task ending in `noCoverage` could stay invisible, and one waiting for a selection could lose its deadline timer. A failed dispatch close stopped the ranking, and a crash between storing an assignment and counting it lost the count. CodeRabbit flagged these on PR #30. They share one cause: what the spaces show was never checked against what was stored.
+
+### Decision
+
+- `TaskRecord` gets `published`. Every phase change stores the task with `published: false`, then publishes it: task space, dispatches (open while collecting, closed afterwards), billing and the assignment, and the task state last. On success it stores `published: true`.
+- A failed publish is tried again after `firstRetryDelayMs` (1 s), doubling up to `maxRetryDelayMs` (1 min). `TaskStore.listOpen()` also returns ended tasks that are not published, so `start()` finishes them after a restart. Running tasks are published again in full at every start.
+- Deadlines are armed from the stored phase, independently of publishing.
+- Billing counts per task ID (`BillingStore.recordAssignment(taskId, agent, month)`, table `billing_assignments`), in the month of the assignment's `issuedAt`.
+- Every `SpaceService` write must be idempotent (`space_service.ts`).
+
+### Consequences
+
+- Participants can see a phase late, never a wrong one. A choose-mode requester whose options appear late has less time to select.
+- Whoever implements `services/space_service/` must make every write repeatable, including closing a dispatch that is already closed.
+- A space host that stays unreachable gets a retry every minute per affected task until it is back.
+- Old SQLite files still open: their tasks count as published, and the earlier `billing_usage` table is no longer used, so its counts do not carry over. Nothing had been released.

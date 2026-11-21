@@ -16,7 +16,7 @@ The Hivemind coordinator: it registers participants, answers the access checks o
 | Config | Read by |
 | --- | --- |
 | `identity_config.ts` | account, PDS, PLC directory, did:web domain, service and key fragments |
-| `tasks_config.ts` | answer-window bounds and the selection window (`library/task_rules.ts`) |
+| `tasks_config.ts` | answer-window bounds, the selection window and the retry delays for failed writes (`library/task_rules.ts`) |
 | `billing_config.ts` | pricing (`library/billing_rules.ts`) |
 | `runtime_config.ts` | poll interval, firehose, XRPC port |
 | `data_config.ts` | database file |
@@ -29,10 +29,10 @@ The Hivemind coordinator: it registers participants, answers the access checks o
 3. **Dispatch.** Task space, `collecting` state and one coarsened dispatch per feed; the deadline is `respondBy`.
 4. **Offer intake.** Offers from eligible agents only, before `respondBy`; collection ends early once every eligible agent has answered.
 5. **Ranking.** The matching service ranks the accepted offers with the task type's default criteria.
-6. **Assignment.** Auto mode assigns the best offer; choose mode waits for the requester's selection until `selectBy`. The assignment is signed (`authentication/attestation_signer.ts`) and counted for billing.
+6. **Assignment.** Auto mode assigns the best offer; choose mode waits for the requester's selection until `selectBy`. The assignment is signed (`authentication/attestation_signer.ts`) and counted once for billing.
 7. **Result.** The assigned agent's `completed` or `failed` progress ends the task; deleting the request cancels it.
 
-Every step stores the task before it writes to a space, so open tasks resume after a restart.
+Every phase change is stored first, marked as not yet published, and then published: the space writes and the billing it implies. All of them can be repeated, so a write that fails is simply tried again, after `firstRetryDelayMs` and then with a doubling delay up to `maxRetryDelayMs` (`config/tasks_config.ts`), and again after a restart, until it succeeds. Deadlines run on the stored phase and do not wait for the spaces. After a restart, running tasks are written again in full and their deadlines re-armed; ended tasks only get the writes they still owe (`core/protocol/interfaces/external/task_lifecycle.md`, Failed writes; ADR-007).
 
 ## Calls
 
@@ -66,5 +66,5 @@ The account password and the attestation key come from environment variables (`c
 
 - `main()` cannot start a real coordinator until `services/` has implementations; `selectServices` says so. Tests pass their own services to `startCoordinator`.
 - Feed declarations cannot carry scoring weights yet, so the task type's default criteria always apply (`library/scoring.ts` already handles feed weights).
-- The firehose delivers new changes only. Records written before the coordinator started reach the index when they change, or when `register` and `setFeedMember` read them directly.
+- The firehose delivers new changes only. Records written before the coordinator started reach the index when they change, or when `register` and `setFeedMember` read them directly. Records carry no revision in the index, so such a direct read can replace a newer firehose change with an older copy. Both go away once the coordinator saves its firehose position and resumes from it.
 - The SDK's `AttestationVerifier` must encode assignments exactly like `attestedBytes` in `authentication/attestation_signer.ts`.

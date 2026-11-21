@@ -50,7 +50,10 @@ import { CoordinatorApiHandlers } from "./runtime/api_handlers.js";
 import { BillingRuntime } from "./runtime/billing.js";
 import { PublicIndexer } from "./runtime/public_indexer.js";
 import { TaskRunner } from "./runtime/task_runner.js";
-import { startXrpcServer } from "./runtime/xrpc_server.js";
+import {
+	type RunningXrpcServer,
+	startXrpcServer,
+} from "./runtime/xrpc_server.js";
 
 // Entry point of the coordinator. startCoordinator() wires the parts from what it is given, so
 // tests start it on the in-memory network; main() builds the real dependencies and starts it.
@@ -116,23 +119,25 @@ export async function startCoordinator(
 		dependencies;
 	const { spaces, router, matching } = services;
 
-	// 1. The answers to calls; available before anything else, the PDS asks while spaces are set up
-	const api = new CoordinatorApiHandlers({
-		coordinator,
-		stores,
-		gateway,
-		clock,
-	});
-	const billing = new BillingRuntime(stores, configs.billing);
-
-	// 2. The intakes, then the feeds and their spaces
-	await spaces.setUpIntakes();
+	// 1. The answers to calls; available before anything else, the PDS asks while spaces are set up.
+	//    Records the handlers read fresh go through the indexer, which follows the firehose later
 	const indexer = new PublicIndexer({
 		gateway,
 		publicIndex: stores.publicIndex,
 		spaces,
 		onError,
 	});
+	const api = new CoordinatorApiHandlers({
+		coordinator,
+		stores,
+		gateway,
+		indexer,
+		clock,
+	});
+	const billing = new BillingRuntime(stores, configs.billing);
+
+	// 2. The intakes, then the feeds and their spaces
+	await spaces.setUpIntakes();
 	await indexer.start();
 
 	// 3. The tasks: open ones resume, then both intakes are followed.
@@ -224,15 +229,23 @@ export async function main(
 		{ coordinator, gateway, stores, services, signer, clock: systemClock },
 		configs,
 	);
-	const server = await startXrpcServer({
-		api: running.api,
-		coordinator,
-		serviceFragment: identity.serviceFragment,
-		resolveSigningKey: (did, forceRefresh) =>
-			didResolver.did.resolveAtprotoKey(did, forceRefresh),
-		clock: systemClock,
-		port: runtime.xrpcPort,
-	});
+	// A server that cannot listen (port in use) stops what already runs
+	let server: RunningXrpcServer;
+	try {
+		server = await startXrpcServer({
+			api: running.api,
+			coordinator,
+			serviceFragment: identity.serviceFragment,
+			resolveSigningKey: (did, forceRefresh) =>
+				didResolver.did.resolveAtprotoKey(did, forceRefresh),
+			clock: systemClock,
+			port: runtime.xrpcPort,
+		});
+	} catch (error) {
+		await running.stop();
+		stores.close();
+		throw error;
+	}
 	console.log(`Coordinator ${coordinator} listening on port ${server.port}`);
 
 	// 5. Stop cleanly on Ctrl+C or a stop signal
