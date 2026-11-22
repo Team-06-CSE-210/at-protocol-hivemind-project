@@ -3,6 +3,7 @@
 // core/protocol/type_definition/policy_types/.
 
 import { l } from "@atproto/lex";
+import * as hivemind from "../../core/protocol/generated/com/hivemind-network.js";
 import {
 	type AtprotoGateway,
 	type RecordChange,
@@ -62,7 +63,7 @@ export class AtprotoSpaces
 
 	async assign(taskId: TaskId, assignment: Assignment): Promise<void> {
 		const space = taskSpaceRef(this.gateway.did, taskId);
-		const collection = "com.hivemind-network.coordinator.assignment";
+		const collection = hivemind.coordinator.assignment.$nsid;
 
 		await this.authority.putMember(space, assignment.agent, {
 			read: true,
@@ -79,7 +80,7 @@ export class AtprotoSpaces
 
 	async writeTaskState(taskId: TaskId, state: TaskState): Promise<void> {
 		const space = taskSpaceRef(this.gateway.did, taskId);
-		const collection = "com.hivemind-network.coordinator.taskState";
+		const collection = hivemind.coordinator.taskState.$nsid;
 
 		await this.gateway.putSpaceRecord(
 			space,
