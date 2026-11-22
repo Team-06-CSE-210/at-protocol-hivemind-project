@@ -165,8 +165,8 @@ export async function startCoordinator(
 	};
 }
 
-// What services/ will provide. Nothing is implemented there yet, so the real coordinator cannot
-// start; tests pass their own services to startCoordinator.
+// Matching is implemented; routing and spaces are still placeholders, so the real coordinator
+// cannot start yet. Tests pass service implementations to startCoordinator.
 interface ServiceContext {
 	coordinator: Did;
 	gateway: AtprotoGateway;
@@ -178,7 +178,7 @@ function selectServices(_context: ServiceContext): CoordinatorServices {
 	// router: new CoverageRouting(), matching: new WeightedRanking(),
 	// spaces: new AtprotoSpaces(context)
 	throw new Error(
-		"services/ has no implementations yet (see services/_services.md)",
+		"Routing and space services are not implemented yet (see services/_services.md)",
 	);
 }
 

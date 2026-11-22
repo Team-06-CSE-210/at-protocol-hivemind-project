@@ -7,7 +7,9 @@ import { monthOf } from "../../../core/coordinator/library/billing_rules.js";
 import { ManualClock } from "../../../core/coordinator/library/clock.js";
 import { BillingRuntime } from "../../../core/coordinator/runtime/billing.js";
 import { TaskRunner } from "../../../core/coordinator/runtime/task_runner.js";
+import type { MatchingEngine } from "../../../core/protocol/interfaces/internal/matching_engine.js";
 import type { CoordinatorStores } from "../../../core/protocol/interfaces/internal/stores.js";
+import { WeightedRanking } from "../../../services/matching_service/weighted_ranking.js";
 import {
 	COORDINATOR,
 	created,
@@ -46,6 +48,7 @@ async function startHarness(
 	stores: CoordinatorStores = createMemoryStores(COORDINATOR),
 	spaces = new FakeSpaceService(),
 	clock = new ManualClock(START),
+	matching: MatchingEngine = fakeMatching,
 ): Promise<Harness> {
 	const errors: unknown[] = [];
 	const runner = new TaskRunner(
@@ -53,7 +56,7 @@ async function startHarness(
 			stores,
 			spaces,
 			router: fakeRouter,
-			matching: fakeMatching,
+			matching,
 			signer: fakeSigner,
 			billing: new BillingRuntime(stores, DEFAULT_BILLING_CONFIG),
 			clock,
@@ -65,10 +68,12 @@ async function startHarness(
 	return { stores, spaces, clock, runner, errors };
 }
 
-async function seededHarness(): Promise<Harness> {
+async function seededHarness(
+	matching: MatchingEngine = fakeMatching,
+): Promise<Harness> {
 	const stores = createMemoryStores(COORDINATOR);
 	await seedParticipants(stores);
-	return startHarness(stores);
+	return startHarness(stores, undefined, undefined, matching);
 }
 
 // Moves the clock and lets the steps the timers queued run
@@ -85,6 +90,73 @@ async function settle(harness: Harness): Promise<void> {
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Collecting and assigning
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+describe("task runner: weighted ranking", () => {
+	for (const mode of ["auto", "choose"] as const) {
+		test(`${mode} uses all ride criteria to rank accepted offers`, async (context) => {
+			const harness = await seededHarness(new WeightedRanking());
+			context.after(() => harness.runner.stop());
+			const { spaces } = harness;
+			const taskId = taskIdFor(`weighted${mode}`);
+			spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId, mode)));
+			await settle(harness);
+
+			// Equal pickup ETAs leave price and trip time to decide the winner.
+			const expensive = rideOffer(taskId, 120);
+			assert.ok(expensive.payload);
+			const expensivePayload = {
+				...expensive.payload,
+				price: { amountMinor: 2_000, currency: "USD" },
+			};
+			expensive.payload = expensivePayload;
+			const cheap = rideOffer(taskId, 120);
+			assert.ok(cheap.payload);
+			const cheapPayload = {
+				...cheap.payload,
+				price: { amountMinor: 1_000, currency: "USD" },
+				tripDurationSeconds: 900,
+			};
+			cheap.payload = cheapPayload;
+			spaces.pushOffer(created(TAXI_ONE, "o1", expensive));
+			spaces.pushOffer(created(TAXI_TWO, "o2", cheap));
+			await settle(harness);
+
+			if (mode === "auto") {
+				assert.equal(spaces.phaseOf(taskId), "assigned");
+				assert.equal(spaces.assignments.get(taskId)?.agent, TAXI_TWO);
+			} else {
+				assert.equal(spaces.phaseOf(taskId), "awaitingSelection");
+				assert.deepEqual(
+					spaces
+						.lastState(taskId)
+						?.options?.map(({ optionId, agent, score }) => ({
+							optionId,
+							agent,
+							score,
+						})),
+					[
+						{ optionId: "option-2", agent: TAXI_TWO, score: 900 },
+						{ optionId: "option-1", agent: TAXI_ONE, score: 600 },
+					],
+				);
+			}
+		});
+	}
+
+	test("auto assigns the first arrival when real weighted scores tie", async (context) => {
+		const harness = await seededHarness(new WeightedRanking());
+		context.after(() => harness.runner.stop());
+		const { spaces } = harness;
+		const taskId = taskIdFor("weightedtie");
+		spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		await settle(harness);
+		spaces.pushOffer(created(TAXI_TWO, "o2", rideOffer(taskId, 120)));
+		spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 120)));
+		await settle(harness);
+		assert.equal(spaces.phaseOf(taskId), "assigned");
+		assert.equal(spaces.assignments.get(taskId)?.agent, TAXI_TWO);
+	});
+});
 
 describe("task runner: auto mode", () => {
 	test("dispatches, ends early once both taxis answered, and assigns the best offer", async () => {
