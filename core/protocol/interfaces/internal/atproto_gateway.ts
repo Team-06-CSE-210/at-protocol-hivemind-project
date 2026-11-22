@@ -4,7 +4,6 @@ import type {
 } from "@atproto/api";
 import type { AtUri, Did, Nsid, SpaceRef, TypedObject } from "./types.js";
 
-
 // The only way our Hivemind Application direclty interfaces with atproto
 
 // Contains TWO main implementations: one for real atproto PDSes and one in-memory variant for local tests
@@ -23,7 +22,7 @@ export interface AtprotoGateway {
 
 	// * * * * * * * * * * * * * * * * * *
 	// PDS Interaction
-	// * * * * * * * * * * * * * * * * * * 
+	// * * * * * * * * * * * * * * * * * *
 
 	// Write or replace record on the account repo (PDS)
 	putRecord(
@@ -33,19 +32,14 @@ export interface AtprotoGateway {
 	): Promise<AtUri>;
 
 	// Delete record from an account repo (PDS)
-	deleteRecord(
-		collection: Nsid, 
-		rkey: string
-	): Promise<void>;
+	deleteRecord(collection: Nsid, rkey: string): Promise<void>;
 
 	// read record from a profile (user or agent)
-	getRecord(
-		uri: AtUri
-	): Promise<TypedObject | undefined>;
+	getRecord(uri: AtUri): Promise<TypedObject | undefined>;
 
 	// * * * * * * * * * * * * * * * * * *
 	// Space Interaction
-	// * * * * * * * * * * * * * * * * * * 
+	// * * * * * * * * * * * * * * * * * *
 
 	// Create or replace a record on the account's repo inside an atproto space
 	putSpaceRecord(
@@ -80,11 +74,7 @@ export interface AtprotoGateway {
 	): Promise<() => void>;
 
 	// Call XRPC procedure on a service (e.g. the coordinator) with service auth for this account
-	callProcedure(
-		service: Did, 
-		method: Nsid, 
-		input: unknown
-	): Promise<unknown>;
+	callProcedure(service: Did, method: Nsid, input: unknown): Promise<unknown>;
 }
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -106,7 +96,6 @@ export type SpacePolicy =
 
 // Space administration. Only the coordinator has one, as the authority of every Hivemind space.
 export interface SpaceAuthority {
-
 	// Create a space under the coordinator's DID; the policy comes from type_definition/policy_types/.
 	createSpace(
 		spaceType: Nsid,
@@ -114,8 +103,8 @@ export interface SpaceAuthority {
 		policy: SpacePolicy,
 	): Promise<SpaceRef>;
 
-	// Add Member to a Memberspace (only works for this type) -> Used for task spaces. 
-	// Managed spaces have no member list; the PDS answers PolicyMismatch. 
+	// Add Member to a Memberspace (only works for this type) -> Used for task spaces.
+	// Managed spaces have no member list; the PDS answers PolicyMismatch.
 	putMember(
 		space: SpaceRef,
 		member: Did,
