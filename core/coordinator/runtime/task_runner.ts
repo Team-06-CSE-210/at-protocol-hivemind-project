@@ -15,6 +15,7 @@ import type {
 	Did,
 	Nsid,
 	OfferOption,
+	RankedOption,
 	RequesterRequest,
 	TaskId,
 	TaskState,
@@ -421,10 +422,21 @@ export class TaskRunner {
 			task.matchedFeeds.map(() => undefined),
 			module.defaultCriteria,
 		);
-		const ranked =
-			candidates.length === 0
-				? []
-				: await matching.rank(criteria, toRankCandidates(candidates, module));
+		// A ranking that throws (invalid criteria or feature values) ends the task as failed. The
+		// collection timer is already cancelled, so the task would otherwise stay collecting forever.
+		let ranked: RankedOption[] = [];
+		if (candidates.length > 0) {
+			try {
+				ranked = await matching.rank(
+					criteria,
+					toRankCandidates(candidates, module),
+				);
+			} catch (error) {
+				this.onError(error);
+				await this.finish(task, "failed");
+				return;
+			}
+		}
 		const now = clock.now();
 		const phase = phaseAfterCollection(
 			task.request.selectionMode,

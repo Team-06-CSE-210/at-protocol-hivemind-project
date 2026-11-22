@@ -4,12 +4,12 @@ Components the coordinator calls that can be swapped without anything else break
 
 | Service | Implements | Status |
 | --- | --- | --- |
-| `matching_service/` | `MatchingEngine`: ranks the accepted offers of one task | stub |
+| `matching_service/` | `MatchingEngine`: ranks the accepted offers of one task | implemented |
 | `routing_service/` | `RequestRouter`: picks the feeds a request goes to (task types, coverage geometry) | placeholder |
 | `space_service/` | `SpaceService`: the intakes, feed spaces and task spaces on atproto Spaces | placeholder |
 | `payment_service/` | not defined yet: charges operators, reports payment outcomes to billing | later |
 
-Until every service is implemented, `core/coordinator/main.ts` cannot start a real coordinator (`selectServices` throws); tests pass their own implementations to `startCoordinator`.
+Live coordinator startup still requires routing and space services. Tests pass service implementations to `startCoordinator`.
 
 ## Rules
 
