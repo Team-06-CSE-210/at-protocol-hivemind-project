@@ -2,11 +2,10 @@
 // on atproto Spaces, with the coordinator's gateway and space authority, and the policies in
 // core/protocol/type_definition/policy_types/.
 
-
 import { l } from "@atproto/lex";
 import type {
 	AtprotoGateway,
-    RecordChange,
+	RecordChange,
 	SpaceAuthority,
 	SpacePolicy,
 } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
@@ -16,7 +15,7 @@ import type {
 	Did,
 	SpaceRef,
 	TaskId,
-    TaskState,
+	TaskState,
 } from "../../core/protocol/interfaces/internal/types.js";
 import {
 	SPACE_TYPES,
@@ -24,8 +23,12 @@ import {
 } from "../../core/protocol/protocol_config/space_definition.js";
 
 export class AtprotoSpaces
-	implements Pick<SpaceService, "createTaskSpace" | "writeTaskState" | "assign" | "watchTaskSpace">
-    {
+	implements
+		Pick<
+			SpaceService,
+			"createTaskSpace" | "writeTaskState" | "assign" | "watchTaskSpace"
+		>
+{
 	constructor(
 		private readonly authority: SpaceAuthority,
 		private readonly taskPolicy: SpacePolicy,
@@ -36,7 +39,11 @@ export class AtprotoSpaces
 		const space = taskSpaceRef(this.gateway.did, taskId);
 
 		try {
-			await this.authority.createSpace(SPACE_TYPES.task, taskId, this.taskPolicy);
+			await this.authority.createSpace(
+				SPACE_TYPES.task,
+				taskId,
+				this.taskPolicy,
+			);
 		} catch (error) {
 			// The coordinator may retry after creating the space but before adding the requester.
 			const alreadyExists =
@@ -74,23 +81,23 @@ export class AtprotoSpaces
 		);
 	}
 
-    async writeTaskState(taskId: TaskId, state: TaskState): Promise<void> {
-        const space = taskSpaceRef(this.gateway.did, taskId);
-        const collection = "com.hivemind-network.coordinator.taskState";
+	async writeTaskState(taskId: TaskId, state: TaskState): Promise<void> {
+		const space = taskSpaceRef(this.gateway.did, taskId);
+		const collection = "com.hivemind-network.coordinator.taskState";
 
-        await this.gateway.putSpaceRecord(
-            space,
-            collection,
-            "self",
-            l.asUnknown$TypedObject({ ...state, $type: collection }),
-        );
-    }
+		await this.gateway.putSpaceRecord(
+			space,
+			collection,
+			"self",
+			l.asUnknown$TypedObject({ ...state, $type: collection }),
+		);
+	}
 
-    watchTaskSpace(
-        taskId: TaskId,
-        onChange: (change: RecordChange) => void,
-    ): Promise<() => void> {
-        const space = taskSpaceRef(this.gateway.did, taskId);
-        return this.gateway.watchSpace(space, onChange);
-    }
+	watchTaskSpace(
+		taskId: TaskId,
+		onChange: (change: RecordChange) => void,
+	): Promise<() => void> {
+		const space = taskSpaceRef(this.gateway.did, taskId);
+		return this.gateway.watchSpace(space, onChange);
+	}
 }

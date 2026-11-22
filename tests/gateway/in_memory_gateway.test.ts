@@ -1,5 +1,3 @@
-import { AtprotoSpaces } from "../../services/space_service/atproto_spaces.js";
-
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
@@ -17,6 +15,7 @@ import {
 	requestIntakeSpaceRef,
 	SPACE_TYPES,
 } from "../../core/protocol/protocol_config/space_definition.js";
+import { AtprotoSpaces } from "../../services/space_service/atproto_spaces.js";
 import {
 	eventually,
 	type GatewayWorld,
@@ -220,5 +219,3 @@ describe("in-memory: writes and procedures", () => {
 		);
 	});
 });
-
-
