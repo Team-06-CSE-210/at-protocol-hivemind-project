@@ -31,7 +31,13 @@ export const END_PHASES: ReadonlySet<string> = new Set<TaskPhase>([
 
 // Every phase change task_lifecycle.md allows; cancelling is possible until an end phase
 const NEXT_PHASES: Readonly<Record<string, readonly TaskPhase[]>> = {
-	collecting: ["awaitingSelection", "assigned", "noOffers", "cancelled"],
+	collecting: [
+		"awaitingSelection",
+		"assigned",
+		"noOffers",
+		"failed",
+		"cancelled",
+	],
 	awaitingSelection: ["assigned", "expired", "cancelled"],
 	assigned: ["completed", "failed", "cancelled"],
 };

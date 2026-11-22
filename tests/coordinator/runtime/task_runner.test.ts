@@ -52,6 +52,7 @@ async function startHarness(
 	spaces = new FakeSpaceService(),
 	clock = new ManualClock(START),
 	matching: MatchingEngine = fakeMatching,
+	reportError?: (error: unknown) => void,
 ): Promise<Harness> {
 	const errors: unknown[] = [];
 	const runner = new TaskRunner(
@@ -63,7 +64,10 @@ async function startHarness(
 			signer: fakeSigner,
 			billing: new BillingRuntime(stores, DEFAULT_BILLING_CONFIG),
 			clock,
-			onError: (error) => errors.push(error),
+			onError: (error) => {
+				errors.push(error);
+				reportError?.(error);
+			},
 		},
 		DEFAULT_TASKS_CONFIG,
 	);
@@ -73,10 +77,11 @@ async function startHarness(
 
 async function seededHarness(
 	matching: MatchingEngine = fakeMatching,
+	reportError?: (error: unknown) => void,
 ): Promise<Harness> {
 	const stores = createMemoryStores(COORDINATOR);
 	await seedParticipants(stores);
-	return startHarness(stores, undefined, undefined, matching);
+	return startHarness(stores, undefined, undefined, matching, reportError);
 }
 
 // Moves the clock and lets the steps the timers queued run
@@ -183,6 +188,36 @@ describe("task runner: weighted ranking", () => {
 		assert.deepEqual(spaces.closedDispatches, [`${DOWNTOWN_FEED} ${taskId}`]);
 		assert.equal(harness.errors.length, 1);
 		assert.ok(harness.errors[0] instanceof RankingInputError);
+		assert.equal(harness.clock.pendingTimers, 0);
+	});
+
+	test("the task still fails when reporting the ranking error throws", async (context) => {
+		const rankingError = new RankingInputError("Invalid scoring criteria");
+		const reportingError = new Error("Could not report ranking error");
+		const failingMatching: MatchingEngine = {
+			rank: async () => {
+				throw rankingError;
+			},
+		};
+		const harness = await seededHarness(failingMatching, (error) => {
+			if (error === rankingError) {
+				throw reportingError;
+			}
+		});
+		context.after(() => harness.runner.stop());
+		const { spaces, stores } = harness;
+		const taskId = taskIdFor("rankreport");
+		spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		await settle(harness);
+		spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 120)));
+		await settle(harness);
+
+		await advance(harness, 30_000);
+
+		assert.equal((await stores.tasks.get(taskId))?.state.phase, "failed");
+		assert.equal(spaces.phaseOf(taskId), "failed");
+		assert.deepEqual(spaces.closedDispatches, [`${DOWNTOWN_FEED} ${taskId}`]);
+		assert.deepEqual(harness.errors, [rankingError, reportingError]);
 		assert.equal(harness.clock.pendingTimers, 0);
 	});
 });

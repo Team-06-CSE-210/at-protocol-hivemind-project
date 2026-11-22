@@ -20,6 +20,7 @@ const after = (durationMs: number) => new Date(START.getTime() + durationMs);
 describe("task rules: phases", () => {
 	test("only the changes task_lifecycle.md lists are allowed", () => {
 		assert.equal(canChangePhase("collecting", "assigned"), true);
+		assert.equal(canChangePhase("collecting", "failed"), true);
 		assert.equal(canChangePhase("awaitingSelection", "expired"), true);
 		assert.equal(canChangePhase("assigned", "cancelled"), true);
 		assert.equal(canChangePhase("collecting", "completed"), false);

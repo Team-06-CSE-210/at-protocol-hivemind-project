@@ -432,8 +432,9 @@ export class TaskRunner {
 					toRankCandidates(candidates, module),
 				);
 			} catch (error) {
-				this.onError(error);
+				// Store the end phase before calling the error reporter, which may throw
 				await this.finish(task, "failed");
+				this.onError(error);
 				return;
 			}
 		}
