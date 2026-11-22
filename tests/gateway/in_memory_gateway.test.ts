@@ -1,3 +1,5 @@
+import { AtprotoSpaces } from "../../services/space_service/atproto_spaces.js";
+
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
 import {
@@ -196,4 +198,27 @@ describe("in-memory: writes and procedures", () => {
 			assert.deepEqual(actions, ["create", "update", "delete"]),
 		);
 	});
+
+	test("creating the same task space twice preserves requester access", async () => {
+		const world = createWorld(new AtProtocolNetwork());
+		const { authority, gateway } = world.coordinator;
+		const policy = await loadPolicy("task.json", gateway.did);
+		const spaces = new AtprotoSpaces(authority, policy, gateway);
+
+		const taskId = "3m5abcde23456";
+		const space = await spaces.createTaskSpace(taskId, world.rider.did);
+		const retriedSpace = await spaces.createTaskSpace(taskId, world.rider.did);
+
+		assert.equal(retriedSpace, space);
+
+		const stopWatching = await world.rider.watchSpace(space, () => {});
+		stopWatching();
+
+		await assert.rejects(
+			world.taxi.watchSpace(space, () => {}),
+			SpaceAccessDeniedError,
+		);
+	});
 });
+
+
