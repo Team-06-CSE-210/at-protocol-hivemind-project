@@ -1,4 +1,4 @@
-import type { RankCandidate, RankedOption, ScoringCriterion } from './types.js'
+import type { RankCandidate, RankedOption, ScoringCriterion } from "./types.js";
 
 /**
  * Ranks the accepted offers of one task.
@@ -10,6 +10,9 @@ import type { RankCandidate, RankedOption, ScoringCriterion } from './types.js'
  * Owner: coordinator.
  */
 export interface MatchingEngine {
-  /** Every candidate with a score from 0 to 1000, best first. */
-  rank(criteria: ScoringCriterion[], candidates: RankCandidate[]): Promise<RankedOption[]>
+	/** Every candidate with a score from 0 to 1000, best first. */
+	rank(
+		criteria: ScoringCriterion[],
+		candidates: RankCandidate[],
+	): Promise<RankedOption[]>;
 }

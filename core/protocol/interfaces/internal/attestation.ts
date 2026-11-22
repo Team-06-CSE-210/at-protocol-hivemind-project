@@ -1,4 +1,4 @@
-import type { Assignment, Attestation, Did } from './types.js'
+import type { Assignment, Attestation, Did } from "./types.js";
 
 /*
  * Signing and checking assignments. The rule both sides must follow is in the description of
@@ -8,11 +8,11 @@ import type { Assignment, Attestation, Did } from './types.js'
 
 /** Owner: coordinator. Holds the #hivemind_attestation key. */
 export interface AttestationSigner {
-  sign(assignment: Omit<Assignment, 'attestation'>): Promise<Attestation>
+	sign(assignment: Omit<Assignment, "attestation">): Promise<Attestation>;
 }
 
 /** Owner: SDK (hivemind_sdk/). An agent acts only if this returns true. */
 export interface AttestationVerifier {
-  /** True if the attestation verifies against the key of one of the trusted coordinators. */
-  verify(assignment: Assignment, trustedCoordinators: Did[]): Promise<boolean>
+	/** True if the attestation verifies against the key of one of the trusted coordinators. */
+	verify(assignment: Assignment, trustedCoordinators: Did[]): Promise<boolean>;
 }

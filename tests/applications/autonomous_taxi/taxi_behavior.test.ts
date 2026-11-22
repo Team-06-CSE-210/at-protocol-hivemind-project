@@ -2,12 +2,6 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { before, describe, test } from "node:test";
-import {
-	TaxiBehavior,
-	type TaxiConfig,
-	type TaxiFleetConfig,
-	type TaxiSimulationOptions,
-} from "../../../demo/autonomous_taxi/simulation/taxi_behavior.js";
 import type { OfferAnswer } from "../../../core/protocol/interfaces/internal/client_lib.js";
 import type {
 	AgentProgress,
@@ -18,6 +12,12 @@ import type {
 	TypedObject,
 } from "../../../core/protocol/interfaces/internal/types.js";
 import { rideTaskType } from "../../../core/protocol/type_definition/task_types/taxi_ride.js";
+import {
+	TaxiBehavior,
+	type TaxiConfig,
+	type TaxiFleetConfig,
+	type TaxiSimulationOptions,
+} from "../../../demo/autonomous_taxi/simulation/taxi_behavior.js";
 
 // The demo taxi on its own: no network, no coordinator, simulated time that does not wait.
 
