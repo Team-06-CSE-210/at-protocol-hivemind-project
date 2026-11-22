@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { l } from "@atproto/lex";
 import { DEFAULT_BILLING_CONFIG } from "../../../core/coordinator/config/billing_config.js";
 import { DEFAULT_TASKS_CONFIG } from "../../../core/coordinator/config/tasks_config.js";
 import { createMemoryStores } from "../../../core/coordinator/data/memory_stores.js";
@@ -7,7 +8,15 @@ import { monthOf } from "../../../core/coordinator/library/billing_rules.js";
 import { ManualClock } from "../../../core/coordinator/library/clock.js";
 import { BillingRuntime } from "../../../core/coordinator/runtime/billing.js";
 import { TaskRunner } from "../../../core/coordinator/runtime/task_runner.js";
+import {
+	LocalSimGateway,
+	LocalSimSpaceAuthority,
+} from "../../../core/protocol/communication/in_memory/at_gateway_localsim.js";
+import { AtProtocolNetwork } from "../../../core/protocol/communication/in_memory/at_protocol_network.js";
 import type { CoordinatorStores } from "../../../core/protocol/interfaces/internal/stores.js";
+import { taskSpaceRef } from "../../../core/protocol/protocol_config/space_definition.js";
+import { AtprotoSpaces } from "../../../services/space_service/atproto_spaces.js";
+import { eventually, loadPolicy } from "../../gateway/gateway_contract.js";
 import {
 	COORDINATOR,
 	created,
@@ -604,5 +613,87 @@ describe("task runner: failed writes", () => {
 		await stopping;
 		assert.equal(harness.spaces.isWatched(taskId), false);
 		assert.equal(harness.clock.pendingTimers, 0);
+	});
+
+	test("coordinator receives rider selection and taxi progress through the task space", async () => {
+		const network = new AtProtocolNetwork();
+		const coordinator = new LocalSimGateway(network, COORDINATOR);
+		const rider = new LocalSimGateway(network, RIDER);
+		const taxi = new LocalSimGateway(network, TAXI_ONE);
+		const taskSpaces = new AtprotoSpaces(
+			new LocalSimSpaceAuthority(network, COORDINATOR),
+			await loadPolicy("task.json", COORDINATOR),
+			coordinator,
+		);
+
+		// Use the existing intake and feed fixtures, with real task-space operations.
+		const spaces = new FakeSpaceService();
+		spaces.createTaskSpace = taskSpaces.createTaskSpace.bind(taskSpaces);
+		spaces.writeTaskState = taskSpaces.writeTaskState.bind(taskSpaces);
+		spaces.assign = taskSpaces.assign.bind(taskSpaces);
+		spaces.watchTaskSpace = taskSpaces.watchTaskSpace.bind(taskSpaces);
+
+		const stores = createMemoryStores(COORDINATOR);
+		await seedParticipants(stores);
+		const harness = await startHarness(stores, spaces);
+		const taskId = taskIdFor("selection");
+		const space = taskSpaceRef(COORDINATOR, taskId);
+
+		try {
+			spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId, "choose")));
+			await settle(harness);
+			spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 300)));
+			spaces.pushOffer(created(TAXI_TWO, "o2", rideOffer(taskId, 120)));
+			await settle(harness);
+
+			const task = await stores.tasks.get(taskId);
+			assert.equal(task?.state.phase, "awaitingSelection");
+			const choice = task.state.options?.find(
+				(option) => option.agent === TAXI_ONE,
+			);
+			assert.ok(choice);
+
+			// The rider deliberately picks the slower taxi.
+			const selection = "com.hivemind-network.requester.selection";
+			await rider.putSpaceRecord(
+				space,
+				selection,
+				"self",
+				l.asUnknown$TypedObject({
+					$type: selection,
+					optionId: choice.optionId,
+					createdAt: "2026-11-19T12:00:05.000Z",
+				}),
+			);
+
+			await eventually(async () => {
+				const assigned = await stores.tasks.get(taskId);
+				assert.equal(assigned?.state.phase, "assigned");
+				assert.equal(assigned?.state.assignedAgent, TAXI_ONE);
+			});
+			await settle(harness);
+
+			const progress = "com.hivemind-network.agent.progress";
+			await taxi.putSpaceRecord(
+				space,
+				progress,
+				"3m5abcde23456",
+				l.asUnknown$TypedObject({
+					$type: progress,
+					status: "completed",
+					createdAt: "2026-11-19T12:10:00.000Z",
+				}),
+			);
+
+			await eventually(async () => {
+				assert.equal(
+					(await stores.tasks.get(taskId))?.state.phase,
+					"completed",
+				);
+			});
+			await settle(harness);
+		} finally {
+			await harness.runner.stop();
+		}
 	});
 });

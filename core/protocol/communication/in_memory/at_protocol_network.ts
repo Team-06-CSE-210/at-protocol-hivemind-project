@@ -1,6 +1,7 @@
 import {
 	type RecordChange,
 	SpaceAccessDeniedError,
+	SpaceAlreadyExistsError,
 	type SpacePolicy,
 } from "../../interfaces/internal/atproto_gateway.js";
 import type {
@@ -129,7 +130,7 @@ export class AtProtocolNetwork {
 	): SpaceRef {
 		const space = formatSpaceRef(authority, spaceType, spaceKey);
 		if (this.spaces.has(space)) {
-			throw new Error(`Space already exists: ${space}`);
+			throw new SpaceAlreadyExistsError(`Space already exists: ${space}`);
 		}
 		this.spaces.set(space, {
 			authority,
