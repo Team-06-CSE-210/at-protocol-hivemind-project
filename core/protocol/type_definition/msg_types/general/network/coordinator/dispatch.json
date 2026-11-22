@@ -1,0 +1,29 @@
+{
+  "lexicon": 1,
+  "id": "com.hivemind-network.coordinator.dispatch",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Call for offers: a request as the coordinator routes it into one feed's space. Names no requester. The dispatch is open while it exists; the coordinator deletes it when the task is assigned, cancelled or runs out of time.",
+      "key": "any",
+      "record": {
+        "type": "object",
+        "required": ["taskId", "payload", "respondBy", "createdAt"],
+        "properties": {
+          "taskId": { "type": "ref", "ref": "com.hivemind-network.defs#taskId" },
+          "payload": {
+            "type": "union",
+            "refs": [],
+            "description": "The request's payload with locations coarsened (geoPoint.uncertaintyMeters says by how much). The exact values reach only the winner, in the assignment."
+          },
+          "respondBy": {
+            "type": "string",
+            "format": "datetime",
+            "description": "End of the answer window. Offers after this time are ignored."
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}

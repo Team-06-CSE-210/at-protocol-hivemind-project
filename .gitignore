@@ -1,10 +1,14 @@
 # Dependencies and generated output
 node_modules/
 dist/
-protocol/generated/
+core/protocol/generated/
 coverage/
 .cache/
 *.tsbuildinfo
+
+# Coordinator database (core/coordinator/config/data_config.ts)
+*.sqlite
+*.sqlite-*
 
 # Local environment files
 .env

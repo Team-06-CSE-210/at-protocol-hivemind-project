@@ -1,0 +1,37 @@
+{
+  "lexicon": 1,
+  "id": "com.hivemind-network.requester.request",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "A requester asks for a task. Written into the coordinator's request intake space; only the coordinator can read it. Deleting this record cancels the task.",
+      "key": "tid",
+      "record": {
+        "type": "object",
+        "required": ["taskId", "payload", "createdAt"],
+        "properties": {
+          "taskId": { "type": "ref", "ref": "com.hivemind-network.defs#taskId" },
+          "payload": {
+            "type": "union",
+            "refs": [],
+            "description": "The task type's #request object, e.g. com.hivemind-network.mobility.ride#request. The task type is the NSID of the payload's lexicon (its $type without the #fragment)."
+          },
+          "selectionMode": {
+            "type": "string",
+            "knownValues": ["auto", "choose"],
+            "default": "auto",
+            "maxLength": 32,
+            "description": "auto: the coordinator assigns the best offer. choose: the requester picks from the ranked options in the task state."
+          },
+          "maxWaitMs": {
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 600000,
+            "description": "Longest the requester will wait for offers. Caps the answer window of the matched feeds."
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}
