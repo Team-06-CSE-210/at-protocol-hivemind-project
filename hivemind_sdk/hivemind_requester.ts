@@ -25,19 +25,20 @@ import {
 	requestIntakeSpaceRef,
 	taskSpaceRef,
 } from "../core/protocol/protocol_config/space_definition.js";
-import { rideTaskType } from "../core/protocol/type_definition/task_types/taxi_ride.js";
+import {
+	moduleForPayload,
+	taskTypeOf,
+} from "../core/protocol/type_definition/task_types/task_index.js";
 
-// Submit a taxi request from an active requester's account to the coordinator's request intake.
+// Submit a request from an active requester's account to the coordinator's request intake.
 // The demo and the requester SDK can share this write step.
 
-const REQUEST_COLLECTION = "com.hivemind-network.requester.request";
-const RIDE_REQUEST_TYPE = "com.hivemind-network.mobility.ride#request";
+const REQUEST_COLLECTION = hivemind.requester.request.$nsid;
 const STATE_COLLECTION = "com.hivemind-network.coordinator.taskState";
 const ASSIGNMENT_COLLECTION = "com.hivemind-network.coordinator.assignment";
 const PROGRESS_COLLECTION = "com.hivemind-network.agent.progress";
 const SELECTION_COLLECTION = "com.hivemind-network.requester.selection";
 
-const TASK_SPACE_WAIT_MS = 10_000;
 const END_PHASES = new Set([
 	"cancelled",
 	"completed",
@@ -77,7 +78,8 @@ export async function submitRequest(
 		throw new Error("submitRequest: selectionMode must be auto or choose");
 	}
 
-	// Validate the full record before writing. The open payload union also needs a task-specific check.
+	// Validate the full record before writing. The open payload union also needs the checks of its
+	// task type, which the task type's module adds (e.g. pickup and dropoff differ for a ride).
 	const taskId = createTaskId();
 	const request = hivemind.requester.request.main.parse({
 		$type: REQUEST_COLLECTION,
@@ -87,10 +89,13 @@ export async function submitRequest(
 		...(maxWaitMs === undefined ? {} : { maxWaitMs }),
 		createdAt: l.toDatetimeString(new Date()),
 	});
-	if (request.payload.$type !== RIDE_REQUEST_TYPE) {
-		throw new Error(`submitRequest: expected a ${RIDE_REQUEST_TYPE} payload`);
+	const taskTypeModule = moduleForPayload(request.payload);
+	if (taskTypeModule === undefined) {
+		throw new Error(
+			`submitRequest: unsupported task type ${taskTypeOf(request.payload)}`,
+		);
 	}
-	rideTaskType.parseRequest(request.payload);
+	taskTypeModule.parseRequest(request.payload);
 
 	// The task ID identifies the task across spaces; the TID identifies this request record.
 	const requestRkey = TID.nextStr();
@@ -152,7 +157,6 @@ export class RequesterTask implements TaskHandle {
 		this.space = taskSpaceRef(dependencies.coordinator, this.taskId);
 		this.ready = this.startWatching();
 		// Callers can use the handle immediately, including cancelling before the first sync.
-		// Keep a rejected watch observable through ready even if the caller is only listening.
 		void this.ready.catch(() => {});
 	}
 
@@ -164,7 +168,6 @@ export class RequesterTask implements TaskHandle {
 	}
 
 	private async startWatching(): Promise<void> {
-		const deadline = performance.now() + TASK_SPACE_WAIT_MS;
 		let delayMs = 50;
 		while (!this.closed) {
 			try {
@@ -181,13 +184,13 @@ export class RequesterTask implements TaskHandle {
 				return;
 			} catch (error) {
 				if (this.closed) return;
-				// The intake write can finish before the coordinator grants task-space access.
-				const remainingMs = deadline - performance.now();
-				if (!(error instanceof SpaceAccessDeniedError) || remainingMs <= 0) {
+				// The intake write can finish before the coordinator grants task-space access. Keep
+				// retrying that expected race; other startup failures are observable through ready.
+				if (!(error instanceof SpaceAccessDeniedError)) {
 					throw error;
 				}
 				await new Promise<void>((resolve) => {
-					const timer = setTimeout(resolve, Math.min(delayMs, remainingMs));
+					const timer = setTimeout(resolve, delayMs);
 					this.wakeRetry = () => {
 						clearTimeout(timer);
 						resolve();
@@ -356,6 +359,11 @@ export class RequesterTask implements TaskHandle {
 		const state = this.state;
 		if (!this.stopWatching || !state || !END_PHASES.has(state.phase)) return;
 		if (state.assignedAgent !== undefined && this.assignment === undefined)
+			return;
+		// A cancelled assigned task can still have progress already written by the agent but not
+		// synced yet. watchSpace orders each writer separately and exposes no full-round boundary,
+		// so only the caller can decide when it has seen enough and close this exceptional case.
+		if (state.phase === "cancelled" && state.assignedAgent !== undefined)
 			return;
 		if (
 			(state.phase === "completed" || state.phase === "failed") &&
