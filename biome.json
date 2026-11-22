@@ -7,8 +7,10 @@
 	},
 	"files": {
 		"includes": [
-			"protocol/**/*.ts",
+			"core/**/*.ts",
 			"services/**/*.ts",
+			"hivemind_sdk/**/*.ts",
+			"demo/**/*.ts",
 			"scripts/**/*.ts",
 			"tests/**/*.ts",
 			"package.json",
@@ -24,7 +26,10 @@
 	"linter": {
 		"enabled": true,
 		"rules": {
-			"preset": "recommended"
+			"preset": "recommended",
+			"complexity": {
+				"noStaticOnlyClass": "error"
+			}
 		}
 	},
 	"javascript": {

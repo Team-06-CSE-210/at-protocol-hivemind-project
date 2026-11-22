@@ -1,0 +1,49 @@
+{
+  "lexicon": 1,
+  "id": "com.hivemind-network.feed.declaration",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "Public declaration of a feed: a task channel with a coverage area, task types, access rule and answer window. Lives in the feed owner's public repo; the record key is the feed's short name.",
+      "key": "any",
+      "record": {
+        "type": "object",
+        "required": ["displayName", "coordinator", "coverage", "taskTypes", "answerWindowMs", "createdAt"],
+        "properties": {
+          "displayName": { "type": "string", "maxLength": 640, "maxGraphemes": 64 },
+          "description": { "type": "string", "maxLength": 3000, "maxGraphemes": 300 },
+          "coordinator": {
+            "type": "string",
+            "format": "did",
+            "description": "The coordinator that serves this feed, e.g. did:web:hivemind-network.com."
+          },
+          "coverage": {
+            "type": "union",
+            "refs": ["com.hivemind-network.defs#geoCircle", "com.hivemind-network.defs#geoPolygon"],
+            "description": "A request is routed to this feed only if its routing points lie inside."
+          },
+          "taskTypes": {
+            "type": "array",
+            "items": { "type": "string", "format": "nsid" },
+            "minLength": 1,
+            "maxLength": 32
+          },
+          "access": {
+            "type": "string",
+            "knownValues": ["public", "private"],
+            "default": "public",
+            "maxLength": 32,
+            "description": "public: any certified, subscribed agent reads it and any requester's matching request goes there. private: only allowlisted agents read and only allowlisted requesters post."
+          },
+          "answerWindowMs": {
+            "type": "integer",
+            "minimum": 50,
+            "maximum": 600000,
+            "description": "How long the coordinator collects offers after dispatching."
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}

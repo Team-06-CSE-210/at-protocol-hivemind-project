@@ -1,0 +1,14 @@
+{
+  "spaceType": "com.hivemind-network.space.requestIntake",
+  "description": "The coordinator's request inbox. Requesters write requests; only the coordinator reads.",
+  "policy": {
+    "$type": "com.atproto.managedspace.policy",
+    "managingApp": "{coordinator}#hivemind_coordinator",
+    "publishPolicy": false
+  },
+  "spaceKey": "main",
+  "read": ["coordinator"],
+  "write": {
+    "com.hivemind-network.requester.request": ["requester"]
+  }
+}

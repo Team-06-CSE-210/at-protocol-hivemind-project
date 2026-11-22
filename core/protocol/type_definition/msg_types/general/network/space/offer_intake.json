@@ -1,0 +1,14 @@
+{
+  "lexicon": 1,
+  "id": "com.hivemind-network.space.offerIntake",
+  "description": "Space type of the coordinator's offer inbox. Agents write their answers to dispatches here; only the coordinator reads. Access rules: type_definition/policy_types/offer_intake.json.",
+  "defs": {
+    "main": {
+      "type": "space",
+      "key": "literal:main",
+      "name": "Hivemind offer intake",
+      "description": "Offers and declines sent to the Hivemind coordinator.",
+      "collections": ["com.hivemind-network.agent.offer"]
+    }
+  }
+}

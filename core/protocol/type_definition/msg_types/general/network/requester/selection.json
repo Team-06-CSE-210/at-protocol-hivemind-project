@@ -1,0 +1,23 @@
+{
+  "lexicon": 1,
+  "id": "com.hivemind-network.requester.selection",
+  "defs": {
+    "main": {
+      "type": "record",
+      "description": "The requester picks one of the ranked options from the task state (choose mode only). Written into the task space; one per task.",
+      "key": "literal:self",
+      "record": {
+        "type": "object",
+        "required": ["optionId", "createdAt"],
+        "properties": {
+          "optionId": {
+            "type": "string",
+            "maxLength": 64,
+            "description": "optionId of an entry in the task state's options."
+          },
+          "createdAt": { "type": "string", "format": "datetime" }
+        }
+      }
+    }
+  }
+}

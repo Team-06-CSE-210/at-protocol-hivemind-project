@@ -1,0 +1,40 @@
+# Interfaces
+
+Every interface uses the message types in `type_definition/msg_types/` and defines none of its own.
+
+## external/: between participants and the coordinator
+
+Defined as lexicons, so any language can implement them.
+
+| Interface | Kind | Called by |
+| --- | --- | --- |
+| `com.hivemind-network.coordinator.register` | XRPC procedure | requesters, operators (for themselves and their agents) |
+| `com.hivemind-network.coordinator.setFeedMember` | XRPC procedure | owners of private feeds |
+| `task_lifecycle.md` | action, carried by records in spaces | requester, agents, coordinator |
+
+Everything else participants do is writing records into spaces (see `type_definition/policy_types/`). The coordinator also implements atproto's own Spaces callbacks (`com.atproto.managedspace.checkUserAccess`, the `notifyWrite` receiver); atproto defines those, so they are not repeated here.
+
+All coordinator methods use atproto service auth: a short-lived token from the caller's PDS, valid for one method. There are no API keys.
+
+## internal/: between modules of our own code
+
+Defined as TypeScript interfaces, because lexicons describe data and HTTP methods, not function calls or callbacks. An internal interface exists wherever an implementation can be swapped (fake or real, JSON file or database, TypeScript or Java) or a different team member plugs in.
+
+| File | Interfaces | Implemented by | Used by |
+| --- | --- | --- | --- |
+| `types.ts` | readable names for the generated message types | (generated) | all files below |
+| `task_type_module.ts` | `TaskTypeModule` | one module per application | coordinator |
+| `matching_engine.ts` | `MatchingEngine` | `services/matching_service/` (later possibly a Java service) | coordinator |
+| `request_router.ts` | `RequestRouter` | `services/routing_service/` | coordinator |
+| `space_service.ts` | `SpaceService`: intakes, feed spaces, task spaces | `services/space_service/` | coordinator |
+| `coordinator_api.ts` | `CoordinatorApi`: register, setFeedMember, checkUserAccess | `core/coordinator/runtime/api_handlers.ts` | XRPC server, in-memory network |
+| `stores.ts` | `ParticipantStore`, `FeedMemberStore`, `TaskStore`, `PublicRecordIndex`, `RevisionStore`, `BillingStore` (all together: `CoordinatorStores`) | `core/coordinator/data/` | coordinator, gateways |
+| `atproto_gateway.ts` | `AtprotoGateway`, `SpaceAuthority` | `core/protocol/communication/network/at_gateway_pds.ts` (real PDS), `core/protocol/communication/in_memory/at_gateway_localsim.ts` (in-memory) | coordinator, SDK |
+| `attestation.ts` | `AttestationSigner`, `AttestationVerifier` | coordinator, SDK | coordinator, agents |
+| `client_lib.ts` | `AgentBehavior`, `AgentClient`, `RequesterClient`, `OrganizationClient` | SDK in `hivemind_sdk/` (operators implement `AgentBehavior`) | demo, view, operators |
+
+If an internal interface ever crosses a process boundary (e.g. the matching engine as a Java service), it gets an XRPC lexicon under `internal.hivemind.*` built from the same message types.
+
+## Where the TypeScript types come from
+
+`npm run lex:build` (`scripts/build_lexicons.ts`, which runs `lex build` from `@atproto/lex`) turns all lexicons into TypeScript in `core/protocol/generated/`: types plus validators. `npm run typecheck` and `npm run build` run it first. That folder is build output, ignored by git and not edited by hand. At runtime the generated validators check incoming records and method inputs; the types themselves only exist at compile time.
