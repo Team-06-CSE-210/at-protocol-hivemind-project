@@ -7,13 +7,13 @@ import {
 	createTaskId,
 	requestIntakeSpaceRef,
 } from "../core/protocol/protocol_config/space_definition.js";
-import { rideTaskType } from "../core/protocol/type_definition/task_types/taxi_ride.js";
+import {
+	moduleForPayload,
+	taskTypeOf,
+} from "../core/protocol/type_definition/task_types/task_index.js";
 
-// Submit a taxi request from an active requester's account to the coordinator's request intake.
+// Submit a request from an active requester's account to the coordinator's request intake.
 // The demo and the requester SDK can share this write step.
-
-const REQUEST_COLLECTION = "com.hivemind-network.requester.request";
-const RIDE_REQUEST_TYPE = "com.hivemind-network.mobility.ride#request";
 
 type SubmitRequestOptions = {
 	selectionMode?: "auto" | "choose";
@@ -45,26 +45,30 @@ export async function submitRequest(
 		throw new Error("submitRequest: selectionMode must be auto or choose");
 	}
 
-	// Validate the full record before writing. The open payload union also needs a task-specific check.
+	// Validate the full record before writing. The open payload union also needs the checks of its
+	// task type, which the task type's module adds (e.g. pickup and dropoff differ for a ride).
 	const taskId = createTaskId();
 	const request = hivemind.requester.request.main.parse({
-		$type: REQUEST_COLLECTION,
+		$type: hivemind.requester.request.$nsid,
 		taskId,
 		payload,
 		...(selectionMode === undefined ? {} : { selectionMode }),
 		...(maxWaitMs === undefined ? {} : { maxWaitMs }),
 		createdAt: l.toDatetimeString(new Date()),
 	});
-	if (request.payload.$type !== RIDE_REQUEST_TYPE) {
-		throw new Error(`submitRequest: expected a ${RIDE_REQUEST_TYPE} payload`);
+	const taskTypeModule = moduleForPayload(request.payload);
+	if (taskTypeModule === undefined) {
+		throw new Error(
+			`submitRequest: unsupported task type ${taskTypeOf(request.payload)}`,
+		);
 	}
-	rideTaskType.parseRequest(request.payload);
+	taskTypeModule.parseRequest(request.payload);
 
 	// The task ID identifies the task across spaces; the TID identifies this request record.
 	const requestRkey = TID.nextStr();
 	await gateway.putSpaceRecord(
 		requestIntakeSpaceRef(coordinator),
-		REQUEST_COLLECTION,
+		hivemind.requester.request.$nsid,
 		requestRkey,
 		l.asUnknown$TypedObject(request),
 	);
