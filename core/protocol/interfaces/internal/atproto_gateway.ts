@@ -108,6 +108,7 @@ export type SpacePolicy =
 export interface SpaceAuthority {
 
 	// Create a space under the coordinator's DID; the policy comes from type_definition/policy_types/.
+	// -> rejects with SpaceAlreadyExistsError if the space exists (a retry after a successful call)
 	createSpace(
 		spaceType: Nsid,
 		spaceKey: string,
@@ -141,3 +142,7 @@ export interface RecordChange {
 }
 
 export class SpaceAccessDeniedError extends Error {}
+
+// createSpace for a space that exists. Both gateways throw it, so callers need not know how a
+// PDS or the in-memory network reports it.
+export class SpaceAlreadyExistsError extends Error {}

@@ -3,11 +3,12 @@
 // core/protocol/type_definition/policy_types/.
 
 import { l } from "@atproto/lex";
-import type {
-	AtprotoGateway,
-	RecordChange,
-	SpaceAuthority,
-	SpacePolicy,
+import {
+	type AtprotoGateway,
+	type RecordChange,
+	SpaceAlreadyExistsError,
+	type SpaceAuthority,
+	type SpacePolicy,
 } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type { SpaceService } from "../../core/protocol/interfaces/internal/space_service.js";
 import type {
@@ -46,12 +47,7 @@ export class AtprotoSpaces
 			);
 		} catch (error) {
 			// The coordinator may retry after creating the space but before adding the requester.
-			const alreadyExists =
-				error instanceof Error &&
-				(error.message === `Space already exists: ${space}` ||
-					("error" in error && error.error === "SpaceAlreadyExists"));
-
-			if (!alreadyExists) {
+			if (!(error instanceof SpaceAlreadyExistsError)) {
 				throw error;
 			}
 		}

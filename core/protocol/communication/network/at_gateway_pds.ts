@@ -19,6 +19,7 @@ import {
 	type AtprotoGateway,
 	type RecordChange,
 	SpaceAccessDeniedError,
+	SpaceAlreadyExistsError,
 	type SpaceAuthority,
 	type SpacePolicy,
 } from "../../interfaces/internal/atproto_gateway.js";
@@ -634,12 +635,21 @@ export class PdsSpaceAuthority implements SpaceAuthority {
 		spaceKey: string,
 		policy: SpacePolicy,
 	): Promise<SpaceRef> {
-		const { data } = await this.agent.com.atproto.space.createSpace({
-			spaceType,
-			skey: spaceKey,
-			policy,
-		});
-		return data.uri as SpaceRef;
+		try {
+			const { data } = await this.agent.com.atproto.space.createSpace({
+				spaceType,
+				skey: spaceKey,
+				policy,
+			});
+			return data.uri as SpaceRef;
+		} catch (error) {
+			if (xrpcErrorName(error) === "SpaceAlreadyExists") {
+				throw new SpaceAlreadyExistsError(
+					`Space already exists: ${spaceType}/${spaceKey}`,
+				);
+			}
+			throw error;
+		}
 	}
 
 	async putMember(

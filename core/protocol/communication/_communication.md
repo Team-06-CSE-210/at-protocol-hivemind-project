@@ -23,6 +23,7 @@ These follow from how the frozen alpha behaves and are tested on both:
 - **Intermediate states may collapse.** The PDS gateway polls; a record changed several times between two polls arrives only in its latest state. Records must therefore describe a state (as `taskState` and `progress` do), not an event that must not be missed.
 - **A refusal rejects `watchSpace`.** No access or no such space: `SpaceAccessDeniedError`. The alpha answers `SpaceNotFound` for both, so they cannot be told apart.
 - **`watchPublic` is live only.** It delivers public records written after it started, no backfill.
+- **Creating an existing space is refused.** `createSpace` rejects with `SpaceAlreadyExistsError` (the alpha answers `SpaceAlreadyExists`), so a caller that retries can treat it as success.
 - **Managed spaces have no member list.** `putMember` on one is refused; access is decided by the managing app.
 
 ## How the PDS gateway reads a space

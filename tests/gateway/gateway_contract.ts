@@ -8,6 +8,7 @@ import {
 	type AtprotoGateway,
 	type RecordChange,
 	SpaceAccessDeniedError,
+	SpaceAlreadyExistsError,
 	type SpaceAuthority,
 	type SpacePolicy,
 } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
@@ -153,6 +154,16 @@ export function runGatewayContract(
 				await loadPolicy("task.json", coordinator.did),
 			);
 			assert.equal(space, taskSpaceRef(coordinator.did, taskId));
+		});
+
+		test("creating an existing space rejects with SpaceAlreadyExistsError", async () => {
+			const taskId = createTaskId();
+			const policy = await loadPolicy("task.json", coordinator.did);
+			await authority.createSpace(SPACE_TYPES.task, taskId, policy);
+			await assert.rejects(
+				authority.createSpace(SPACE_TYPES.task, taskId, policy),
+				SpaceAlreadyExistsError,
+			);
 		});
 
 		test("members and the authority see each other's records, with authors", async () => {
