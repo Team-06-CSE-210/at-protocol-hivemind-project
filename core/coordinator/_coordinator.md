@@ -28,7 +28,7 @@ The Hivemind coordinator: it registers participants, answers the access checks o
 2. **Routing.** The routing service picks the feeds by task type and coverage; the coordinator then drops private feeds the requester is not allowlisted for.
 3. **Dispatch.** Task space, `collecting` state and one coarsened dispatch per feed; the deadline is `respondBy`.
 4. **Offer intake.** Offers from eligible agents only, before `respondBy`; collection ends early once every eligible agent has answered.
-5. **Ranking.** The matching service ranks the accepted offers with the task type's default criteria.
+5. **Ranking.** The matching service ranks the accepted offers with the task type's default criteria. If the ranking throws, the task ends in `failed` and the error is reported.
 6. **Assignment.** Auto mode assigns the best offer; choose mode waits for the requester's selection until `selectBy`. The assignment is signed (`authentication/attestation_signer.ts`) and counted once for billing.
 7. **Result.** The assigned agent's `completed` or `failed` progress ends the task; deleting the request cancels it.
 

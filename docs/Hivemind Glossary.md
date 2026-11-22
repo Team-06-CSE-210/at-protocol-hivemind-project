@@ -138,7 +138,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **expired** (hivemind notation): Task phase and closed reason when the requester did not pick an option before `selectBy` (selection window: 60 s by default, 45 s in the taxi demo).
 
-**failed** (hivemind notation): Task phase, and status-update value, for a task the assigned agent could not complete.
+**failed** (hivemind notation): Task phase, and status-update value, for a task the assigned agent could not complete, or whose accepted offers the coordinator could not rank.
 
 **Fan-out** (general term): Sending one message to many recipients. The coordinator fans a request out by writing one dispatch into each matched feed's space; the demo map draws this as lines from the pickup to every agent that can read one of those feeds.
 

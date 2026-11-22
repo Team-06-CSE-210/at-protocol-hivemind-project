@@ -9,7 +9,10 @@ import { BillingRuntime } from "../../../core/coordinator/runtime/billing.js";
 import { TaskRunner } from "../../../core/coordinator/runtime/task_runner.js";
 import type { MatchingEngine } from "../../../core/protocol/interfaces/internal/matching_engine.js";
 import type { CoordinatorStores } from "../../../core/protocol/interfaces/internal/stores.js";
-import { WeightedRanking } from "../../../services/matching_service/weighted_ranking.js";
+import {
+	RankingInputError,
+	WeightedRanking,
+} from "../../../services/matching_service/weighted_ranking.js";
 import {
 	COORDINATOR,
 	created,
@@ -155,6 +158,32 @@ describe("task runner: weighted ranking", () => {
 		await settle(harness);
 		assert.equal(spaces.phaseOf(taskId), "assigned");
 		assert.equal(spaces.assignments.get(taskId)?.agent, TAXI_TWO);
+	});
+
+	test("a ranking that throws ends the task as failed instead of leaving it collecting", async (context) => {
+		const failingMatching: MatchingEngine = {
+			rank: async () => {
+				throw new RankingInputError(
+					"Scoring criteria must have positive total weight",
+				);
+			},
+		};
+		const harness = await seededHarness(failingMatching);
+		context.after(() => harness.runner.stop());
+		const { spaces } = harness;
+		const taskId = taskIdFor("rankingfails");
+		spaces.pushRequest(created(RIDER, "r1", rideRequest(taskId)));
+		await settle(harness);
+		spaces.pushOffer(created(TAXI_ONE, "o1", rideOffer(taskId, 120)));
+		spaces.pushOffer(created(TAXI_TWO, "o2", rideOffer(taskId, 300)));
+		await harness.runner.settled();
+
+		// The requester sees the end phase, the dispatches close and the error is reported
+		assert.equal(spaces.phaseOf(taskId), "failed");
+		assert.deepEqual(spaces.closedDispatches, [`${DOWNTOWN_FEED} ${taskId}`]);
+		assert.equal(harness.errors.length, 1);
+		assert.ok(harness.errors[0] instanceof RankingInputError);
+		assert.equal(harness.clock.pendingTimers, 0);
 	});
 });
 

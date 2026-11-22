@@ -11,7 +11,7 @@ Ranks the accepted offers of one task. The coordinator calls it through `Matchin
 - **Input:** the scoring criteria (`feature`, `weightPercent`, `better`) and one candidate per accepted offer with its feature values, as the task type module's `featureValues` returns them.
 - **Output:** every candidate with a score from 0 to 1000, best first.
 - Criteria and candidates are not mutated. A valid call with no candidates returns `[]`; a single candidate scores 1000.
-- Invalid inputs reject with `RankingInputError`: criteria must be nonempty with unique feature names, integer weights from 0 to 100 and a positive total weight. Candidate IDs and feature names must be unique within their respective lists, and each candidate must supply every scoring feature as a safe integer.
+- Invalid inputs reject with `RankingInputError`: criteria must be nonempty with unique feature names, integer weights from 0 to 100 and a positive total weight. Candidate IDs and feature names must be unique within their respective lists, and each candidate must supply every scoring feature as a safe integer. The coordinator then ends the task in `failed`.
 - Which criteria apply (feed-owner weights or the task type's defaults) is decided by the coordinator before the call, not here.
 
 ## Weighted min-max scoring
