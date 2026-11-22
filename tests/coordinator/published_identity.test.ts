@@ -32,6 +32,7 @@ import {
 	PdsGateway,
 	PdsSpaceAuthority,
 } from "../../core/protocol/communication/network/at_gateway_pds.js";
+import * as hivemind from "../../core/protocol/generated/com/hivemind-network.js";
 import type { RecordChange } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type { CoordinatorApi } from "../../core/protocol/interfaces/internal/coordinator_api.js";
 import type {
@@ -42,8 +43,9 @@ import {
 	INTAKE_SPACE_KEY,
 	SPACE_TYPES,
 } from "../../core/protocol/protocol_config/space_definition.js";
+import { submitRequest } from "../../hivemind_sdk/hivemind_requester.js";
 import { eventually, loadPolicy } from "../gateway/gateway_contract.js";
-import { FakeSpaceService, rideRequest, taskIdFor } from "./fixtures.js";
+import { FakeSpaceService } from "./fixtures.js";
 
 // The coordinator's DID entries on a real PDS and PLC directory (@atproto/dev-env, frozen Spaces
 // alpha): the coordinator refuses to start without them, and with them the PDS reaches the
@@ -52,6 +54,12 @@ import { FakeSpaceService, rideRequest, taskIdFor } from "./fixtures.js";
 const PASSWORD = "password";
 const REGISTER = "com.hivemind-network.coordinator.register";
 const REQUEST = "com.hivemind-network.requester.request";
+const RIDE_PAYLOAD = {
+	$type: "com.hivemind-network.mobility.ride#request",
+	pickup: { latE7: 328_801_000, lonE7: -1_172_340_000 },
+	dropoff: { latE7: 327_157_000, lonE7: -1_171_611_000 },
+	passengers: 2,
+};
 // Polling fast keeps the test short; the default is 2 s
 const POLL_INTERVAL_MS = 100;
 
@@ -199,13 +207,7 @@ describe("coordinator identity: published with a PLC update", () => {
 			INTAKE_SPACE_KEY,
 			await loadPolicy("request_intake.json", coordinator),
 		);
-		const gateway = new PdsGateway({
-			agent: local.coordinatorAgent,
-			didResolver,
-			firehoseService: local.pdsUrl.replace(/^http/, "ws"),
-			pollIntervalMs: POLL_INTERVAL_MS,
-			onError: (error) => console.error("Background error:", error),
-		});
+		const gateway = gatewayFor(local.coordinatorAgent);
 		stopWatches.push(
 			await gateway.watchSpace(intake, (change) => intakeChanges.push(change)),
 		);
@@ -219,14 +221,14 @@ describe("coordinator identity: published with a PLC update", () => {
 		await local?.close();
 	});
 
-	// A request written into the account's own repo; its PDS then notifies the intake's host
-	async function writeRequest(agent: AtpAgent, name: string): Promise<void> {
-		await agent.com.atproto.space.putRecord({
-			space: intake,
-			repo: agent.assertDid,
-			collection: REQUEST,
-			rkey: name,
-			record: rideRequest(taskIdFor(name)),
+	// Give the coordinator and each requester a Gateway bound to their own account.
+	function gatewayFor(agent: AtpAgent): PdsGateway {
+		return new PdsGateway({
+			agent,
+			didResolver,
+			firehoseService: local.pdsUrl.replace(/^http/, "ws"),
+			pollIntervalMs: POLL_INTERVAL_MS,
+			onError: (error) => console.error("Background error:", error),
 		});
 	}
 
@@ -238,7 +240,7 @@ describe("coordinator identity: published with a PLC update", () => {
 		);
 	});
 
-	test("a registered requester's request reaches the coordinator", async () => {
+	test("a registered requester's SDK submission reaches the request intake", async (context) => {
 		// 1. The rider registers, with a service token its PDS issues
 		const rider = await createAccount(local, "rider");
 		const { data } = await rider.com.atproto.server.getServiceAuth({
@@ -258,27 +260,59 @@ describe("coordinator identity: published with a PLC update", () => {
 		);
 		assert.equal(response.status, 200);
 
-		// 2. Its request: the PDS asks the coordinator, which allows it
-		await writeRequest(rider, "rider-request");
+		// 2. Write through the requester SDK. Only the coordinator's watch confirms delivery.
+		const options = { selectionMode: "auto", maxWaitMs: 5_000 } as const;
+		const { taskId, requestRkey } = await submitRequest(
+			{ gateway: gatewayFor(rider), coordinator: local.coordinatorDid },
+			RIDE_PAYLOAD,
+			options,
+		);
+		assert.match(taskId, /^[a-z2-7]{26}$/);
+		assert.match(requestRkey, /^[234567abcdefghijklmnopqrstuvwxyz]{13}$/);
+		context.diagnostic(
+			`[Rider SDK] Write completed ${JSON.stringify({ space: intake, taskId, requestRkey })}`,
+		);
+
+		// 3. Compare the actual record received from the PDS with the test's original input.
 		await eventually(() => {
 			assert.ok(
 				decisions.some(
 					({ user, allowed }) => user === rider.assertDid && allowed,
 				),
 			);
+			const change = intakeChanges.find(
+				(change) =>
+					change.author === rider.assertDid && change.rkey === requestRkey,
+			);
 			assert.ok(
-				intakeChanges.some(
-					(change) =>
-						change.author === rider.assertDid &&
-						change.rkey === "rider-request",
-				),
+				change?.record,
+				"Expected the coordinator to receive the request",
+			);
+			assert.equal(change.space, intake);
+			assert.equal(change.collection, REQUEST);
+			const record = hivemind.requester.request.main.parse(change.record);
+			assert.equal(record.taskId, taskId);
+			assert.deepEqual(record.payload, RIDE_PAYLOAD);
+			assert.equal(record.selectionMode, options.selectionMode);
+			assert.equal(record.maxWaitMs, options.maxWaitMs);
+			context.diagnostic(
+				`[Coordinator watch] Received ${JSON.stringify({
+					space: change.space,
+					author: change.author,
+					collection: change.collection,
+					requestRkey: change.rkey,
+					record,
+				})}`,
 			);
 		});
 	});
 
-	test("an unregistered account's request is refused", async () => {
+	test("an unregistered account's SDK submission stays invisible to the request intake", async (context) => {
 		const stranger = await createAccount(local, "stranger");
-		await writeRequest(stranger, "stranger-request");
+		const { taskId, requestRkey } = await submitRequest(
+			{ gateway: gatewayFor(stranger), coordinator: local.coordinatorDid },
+			RIDE_PAYLOAD,
+		);
 
 		// The PDS asked, the coordinator said no, and the request never shows up in the intake
 		await eventually(() => {
@@ -291,6 +325,9 @@ describe("coordinator identity: published with a PLC update", () => {
 		await new Promise((resolve) => setTimeout(resolve, 4 * POLL_INTERVAL_MS));
 		assert.ok(
 			!intakeChanges.some((change) => change.author === stranger.assertDid),
+		);
+		context.diagnostic(
+			`[Coordinator watch] Access denied; no record observed for ${JSON.stringify({ taskId, requestRkey })}`,
 		);
 	});
 });
