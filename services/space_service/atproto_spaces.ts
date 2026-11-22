@@ -1,6 +1,8 @@
-// Placeholder: AtprotoSpaces, implements SpaceService (core/protocol/interfaces/internal/space_service.ts)
-// on atproto Spaces, with the coordinator's gateway and space authority, and the policies in
+// AtprotoSpaces: SpaceService (core/protocol/interfaces/internal/space_service.ts) on atproto
+// Spaces, with the coordinator's gateway and space authority, and the policies in
 // core/protocol/type_definition/policy_types/.
+// Task spaces are implemented (S6); the intakes (S1, S2) and feed spaces (S3) follow, and then the
+// class implements all of SpaceService.
 
 import { l } from "@atproto/lex";
 import * as hivemind from "../../core/protocol/generated/com/hivemind-network.js";
