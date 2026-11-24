@@ -102,6 +102,7 @@ describe("in-memory: managed spaces", () => {
 		assert.deepEqual(changes, [`${TAXI} com.hivemind-network.agent.offer`]);
 		assert.equal(network.hiddenWrites.length, 1);
 		assert.equal(network.hiddenWrites[0].author, RIDER);
+		// The taxi should still be denied because it has no assignment yet
 		await assert.rejects(
 			world.rider.watchSpace(intake, () => {}),
 			SpaceAccessDeniedError,
@@ -208,10 +209,13 @@ describe("in-memory: writes and procedures", () => {
 
 		const taskId = "3m5abcde23456";
 		const space = await spaces.createTaskSpace(taskId, world.rider.did);
+		// Simulate the coordinator retrying after the first call succeeded
+		// The second call should return the same space and preserve rider access
 		const retriedSpace = await spaces.createTaskSpace(taskId, world.rider.did);
 
 		assert.equal(retriedSpace, space);
 
+		// A successful subscription is enough to check read access here
 		const stopWatching = await world.rider.watchSpace(space, () => {});
 		stopWatching();
 
@@ -251,6 +255,8 @@ describe("in-memory: writes and procedures", () => {
 			request: request.payload,
 			terms: offer.payload,
 			issuedAt: offer.createdAt,
+			// These fixture bytes let us check that the attestation survives the
+			// write and read. Signature verification is outside this test's scope
 			attestation: {
 				keyId: `${gateway.did}#hivemind_attestation`,
 				signature: new Uint8Array([9, 8, 7]),
@@ -266,6 +272,9 @@ describe("in-memory: writes and procedures", () => {
 		} as const;
 		await spaces.writeTaskState(taskId, latestState);
 
+		// Subscribe after both state writes. A rider who joins late should see
+		// only "assigned" at "self", and the assigned taxi should receive the
+		// assignment that was already published
 		const riderStates: unknown[] = [];
 		const taxiAssignments: unknown[] = [];
 		const stopRider = await world.rider.watchSpace(space, (change) => {
@@ -285,6 +294,7 @@ describe("in-memory: writes and procedures", () => {
 				assert.deepEqual(taxiAssignments, [assignment]);
 			});
 			await assert.rejects(
+				// Check that assigning one taxi leaves the space closed to other taxis
 				otherTaxi.watchSpace(space, () => {}),
 				SpaceAccessDeniedError,
 			);

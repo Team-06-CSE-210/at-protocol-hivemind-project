@@ -626,7 +626,9 @@ describe("task runner: failed writes", () => {
 			coordinator,
 		);
 
-		// Use the existing intake and feed fixtures, with real task-space operations.
+		// Feed the request and offers through the existing fixtures
+		// The four task-space methods use AtprotoSpaces, so selection and progress
+		// have to reach the coordinator through its space subscription
 		const spaces = new FakeSpaceService();
 		spaces.createTaskSpace = taskSpaces.createTaskSpace.bind(taskSpaces);
 		spaces.writeTaskState = taskSpaces.writeTaskState.bind(taskSpaces);
@@ -653,7 +655,8 @@ describe("task runner: failed writes", () => {
 			);
 			assert.ok(choice);
 
-			// The rider deliberately picks the slower taxi.
+			// Pick the slower taxi so the test can tell whether the coordinator
+			// followed the rider's choice. The faster taxi would win on ranking
 			const selection = "com.hivemind-network.requester.selection";
 			await rider.putSpaceRecord(
 				space,
@@ -671,6 +674,8 @@ describe("task runner: failed writes", () => {
 				assert.equal(assigned?.state.phase, "assigned");
 				assert.equal(assigned?.state.assignedAgent, TAXI_ONE);
 			});
+			// Seeing "assigned" in the store can happen before the space access
+			// update finishes. Let the coordinator finish before the taxi posts progress
 			await settle(harness);
 
 			const progress = "com.hivemind-network.agent.progress";
@@ -685,6 +690,8 @@ describe("task runner: failed writes", () => {
 				}),
 			);
 
+			// The write goes through the simulator. Wait for the coordinator's
+			// watcher to process it and mark the task completed in the store
 			await eventually(async () => {
 				assert.equal(
 					(await stores.tasks.get(taskId))?.state.phase,
