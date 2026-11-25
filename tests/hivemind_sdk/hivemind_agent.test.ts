@@ -581,3 +581,85 @@ test("the same task arriving through two different feed spaces produces one offe
 	assert.equal(world.sent.length, 1);
 	assert.deepEqual(world.errors, []);
 });
+
+test("forgets a task once the dispatches of all its feeds are deleted", async (t) => {
+	const world = await harness();
+	t.after(() => world.router.stop());
+	await world.stores.publicIndex.apply(
+		created(FEED_OWNER, "private", feedDeclaration()),
+	);
+	await world.stores.publicIndex.apply(
+		created(TAXI_ONE, "self", agentProfile([DOWNTOWN_FEED, PRIVATE_FEED])),
+	);
+	await world.authority.createSpace(
+		SPACE_TYPES.feed,
+		await feedKeyOf(PRIVATE_FEED),
+		await loadPolicy("feed.json", COORDINATOR),
+	);
+	const privateFeed = await feedSpaceRef(COORDINATOR, PRIVATE_FEED);
+	world.dependencies.feeds = [DOWNTOWN_FEED, PRIVATE_FEED];
+	await world.router.start();
+	await world.publish();
+	await world.coordinator.putSpaceRecord(
+		privateFeed,
+		hivemind.coordinator.dispatch.$nsid,
+		world.dispatch.taskId,
+		l.asUnknown$TypedObject(world.dispatch),
+	);
+	await eventually(() => assert.equal(world.sent.length, 1));
+	assert.equal(world.router.trackedTasks, 1);
+
+	// One feed's dispatch is gone; the task is still open in the other
+	await world.coordinator.deleteSpaceRecord(
+		world.feed,
+		hivemind.coordinator.dispatch.$nsid,
+		world.dispatch.taskId,
+	);
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	await world.router.settled();
+	assert.equal(world.router.trackedTasks, 1);
+
+	await world.coordinator.deleteSpaceRecord(
+		privateFeed,
+		hivemind.coordinator.dispatch.$nsid,
+		world.dispatch.taskId,
+	);
+	await eventually(() => assert.equal(world.router.trackedTasks, 0));
+	assert.equal(world.decisions(), 1);
+	assert.deepEqual(world.errors, []);
+});
+
+test("forgets a task whose dispatch closes while the operator decides", async (t) => {
+	let finish: (answer: OfferAnswer) => void = () => {};
+	let started = false;
+	const decision = new Promise<OfferAnswer>((resolve) => {
+		finish = resolve;
+	});
+	const world = await harness({
+		behavior: {
+			onDispatch: () => {
+				started = true;
+				return decision;
+			},
+		},
+	});
+	t.after(async () => {
+		finish({ decision: "decline" });
+		await world.router.stop();
+	});
+	await world.router.start();
+	await world.publish();
+	await eventually(() => assert.equal(started, true));
+	await world.coordinator.deleteSpaceRecord(
+		world.feed,
+		hivemind.coordinator.dispatch.$nsid,
+		world.dispatch.taskId,
+	);
+	await new Promise<void>((resolve) => setImmediate(resolve));
+	// The decision is still running, so the task stays until it ends
+	assert.equal(world.router.trackedTasks, 1);
+	finish({ decision: "decline" });
+	await world.router.settled();
+	assert.equal(world.router.trackedTasks, 0);
+	assert.equal(world.sent.length, 0);
+});

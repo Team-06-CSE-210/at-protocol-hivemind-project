@@ -28,6 +28,11 @@ is assigned to another task. The router still answers every dispatch, so an agen
 offers on several tasks. Once K5 sees that the agent won a task, it should withdraw the agent's
 other open offers with `withdraw(taskId)`, so those tasks can close early.
 
+Once every dispatch of a task is deleted and no decision or write is running, the router forgets
+the task, so a long-running agent keeps state only for open dispatches (`trackedTasks` counts
+them). A deleted dispatch does not come back, and a withdrawal after collection changes nothing.
+K5's check whether the agent won belongs at the same point.
+
 Accepts need a payload that the task type's module accepts for the dispatch (`moduleForPayload`,
 then `parseOffer` against the dispatch's payload; coarsening keeps what that check reads). The
 coordinator would drop a refused accept without telling the agent, so the router reports it
@@ -36,11 +41,13 @@ through `onError` and writes nothing. Declines may carry a reason.
 A failed key generation or write is retried up to `maxWriteAttempts`, reusing the validated offer
 and any key already generated. Each retry rechecks closure and the latest deadline. After exhaustion
 the router reports `onError`; a later dispatch delivery can retry the retained offer. This retry
-state lasts for the router instance, not across process restarts. `withdraw(taskId)` closes a
-pending decision immediately, waits for any offer write already in flight, and deletes the agent's
-own record with bounded retries. Concurrent restarts wait for shutdown to finish; partial startup
-releases earlier subscriptions. The behavior receives a copy of the dispatch so it cannot change
-routing identity or deadlines.
+state lasts for the router instance, not across process restarts. After a restart, a dispatch that
+is still open is answered again under a new key; the coordinator takes that as a new offer from the
+agent, which replaces its earlier one. `withdraw(taskId)` closes a pending decision immediately,
+waits for any offer write already in flight, and deletes the agent's own record with bounded
+retries. Concurrent restarts wait for shutdown to finish; partial startup releases earlier
+subscriptions. The behavior receives a copy of the dispatch so it cannot change routing identity or
+deadlines.
 
 `onSent` means the Gateway write completed, not that the coordinator accepted the offer. A PDS can
 accept a write that stays invisible because the agent lacks space access (see `_communication.md`).

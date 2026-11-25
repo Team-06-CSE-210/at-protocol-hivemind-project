@@ -67,6 +67,8 @@ interface PendingOffer {
 export class AgentOfferRouter {
 	private readonly offers = new Map<TaskId, PendingOffer>();
 	private readonly taskByDispatch = new Map<string, TaskId>();
+	// The dispatches of each task that are not deleted yet; a task can arrive through several feeds
+	private readonly dispatchesByTask = new Map<TaskId, Set<string>>();
 	private readonly feedSpaces = new Set<SpaceRef>();
 	private readonly work = new Set<Promise<void>>();
 	private readonly unwatch: Array<() => void> = [];
@@ -129,6 +131,12 @@ export class AgentOfferRouter {
 			this.stopping = undefined;
 		});
 		return this.stopping;
+	}
+
+	// Tasks kept in memory: open dispatches, and decisions or writes still running
+	get trackedTasks(): number {
+		return new Set([...this.offers.keys(), ...this.dispatchesByTask.keys()])
+			.size;
 	}
 
 	// Wait for work already delivered by the Gateway, for shutdown and local tests
@@ -225,10 +233,17 @@ export class AgentOfferRouter {
 		const dispatchKey = `${change.space}/${change.rkey}`;
 		if (change.action === "delete") {
 			const taskId = this.taskByDispatch.get(dispatchKey);
-			const pending = taskId && this.offers.get(taskId);
+			if (taskId === undefined) {
+				return;
+			}
+			const pending = this.offers.get(taskId);
 			if (pending) {
 				pending.closed = true;
 			}
+			// The coordinator deletes dispatches when collection ends; they do not come back
+			this.taskByDispatch.delete(dispatchKey);
+			this.dispatchesByTask.get(taskId)?.delete(dispatchKey);
+			this.forgetIfClosed(taskId);
 			return;
 		}
 		const parsed = hivemind.coordinator.dispatch.main.safeParse(change.record);
@@ -241,6 +256,10 @@ export class AgentOfferRouter {
 			return;
 		}
 		this.taskByDispatch.set(dispatchKey, dispatch.taskId);
+		const dispatches =
+			this.dispatchesByTask.get(dispatch.taskId) ?? new Set<string>();
+		dispatches.add(dispatchKey);
+		this.dispatchesByTask.set(dispatch.taskId, dispatches);
 		let pending = this.offers.get(dispatch.taskId);
 		if (pending?.closed || pending?.sent) {
 			return;
@@ -297,7 +316,22 @@ export class AgentOfferRouter {
 			await this.writeOffer(pending, pending.offer);
 		} finally {
 			pending.busy = false;
+			this.forgetIfClosed(dispatch.taskId);
 		}
+	}
+
+	// Forget a task once all its dispatches are deleted and no decision or write is running, so a
+	// long-running agent keeps state only for open dispatches. Nothing is lost: a deleted dispatch
+	// does not come back, and a withdrawal after collection would change nothing
+	private forgetIfClosed(taskId: TaskId): void {
+		if (
+			(this.dispatchesByTask.get(taskId)?.size ?? 0) > 0 ||
+			this.offers.get(taskId)?.busy
+		) {
+			return;
+		}
+		this.dispatchesByTask.delete(taskId);
+		this.offers.delete(taskId);
 	}
 
 	// Retry with the same terms and key, while the latest dispatch is still open
