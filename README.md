@@ -31,6 +31,19 @@ Every folder has an overview doc named `_<folder>.md`. Imports point toward `cor
 
 The [CI workflow](.github/workflows/ci.yml) runs `npm ci`, `npm run check`, and `npm test` with the Node version in `.nvmrc` on pull requests and pushes to `develop` and `main`. Keep shared TypeScript module tests under `tests/` so the repository check runs them automatically. Add a separate job when a module needs a different toolchain or infrastructure.
 
+Offer routing (K4 and S2) uses the existing Gateway interface: feed dispatch -> agent behavior ->
+offer intake -> coordinator collector. See [the SDK overview](hivemind_sdk/_hivemind_sdk.md#offer-routing)
+and [the space service overview](services/space_service/_space_service.md) for the integration points.
+To build and run only its local simulation tests, after `npm ci`:
+
+```bash
+npm run build
+node --test dist/tests/hivemind_sdk/hivemind_agent.test.js dist/tests/coordinator/runtime/offer_routing.test.js
+```
+
+These tests use `LocalSimGateway` and the coordinator's real access and collection code. They do
+not start a PDS. The full demo still needs the other missing services described below.
+
 ## Running the demo locally
 
 The taxi demo in steps. Steps marked **(tbd)** do not work yet; they say what they will do once the missing parts exist ([Missing parts](#missing-parts)). Steps 1 to 5 work today.
@@ -116,7 +129,7 @@ The feed owner publishes a feed declaration for a zone (its coverage area). The 
 
 1. The operator registers (`register` with role `operator`) and then registers each vehicle as its agent (role `agent`).
 2. Each vehicle publishes its agent profile, naming the zones it serves.
-3. The agent client (`hivemind_sdk/hivemind_agent.ts`, empty so far) runs one `TaxiBehavior` per vehicle (`demo/autonomous_taxi/simulation/taxi_behavior.ts`, exists). With `timeScale` 10 from the fleet config, a 10-minute ride takes one minute.
+3. The agent client runs one `TaxiBehavior` per vehicle (`demo/autonomous_taxi/simulation/taxi_behavior.ts`, exists). Its offer-routing portion is `AgentOfferRouter` in `hivemind_sdk/hivemind_agent.ts`; onboarding and assignment execution still need to be connected. With `timeScale` 10 from the fleet config, a 10-minute ride takes one minute.
 
 ### 10. Request a ride (terminal 4) (tbd)
 

@@ -90,9 +90,14 @@ interface PendingRetry {
 	cancel?: () => void;
 }
 
+interface PendingOfferChange extends PendingRetry {
+	change: RecordChange;
+}
+
 type StoredOffer = TaskRecord["offers"][number];
 
 const REQUEST_COLLECTION = "com.hivemind-network.requester.request";
+const OFFER_COLLECTION = "com.hivemind-network.agent.offer";
 const SELECTION_COLLECTION = "com.hivemind-network.requester.selection";
 const PROGRESS_COLLECTION = "com.hivemind-network.agent.progress";
 
@@ -106,6 +111,7 @@ export class TaskRunner {
 	private readonly running = new Map<TaskId, RunningTask>();
 	// Tasks whose writes are tried again; kept apart from running, as ended tasks may need it too
 	private readonly retries = new Map<TaskId, PendingRetry>();
+	private readonly offerChanges = new Map<string, PendingOfferChange>();
 	// Queues by task ID, and by "author collection rkey" for intake records
 	private readonly queues = new Map<string, Promise<void>>();
 	private readonly stopIntakes: Array<() => void> = [];
@@ -164,6 +170,10 @@ export class TaskRunner {
 			retry.cancel?.();
 		}
 		this.retries.clear();
+		for (const pending of this.offerChanges.values()) {
+			pending.cancel?.();
+		}
+		this.offerChanges.clear();
 		await Promise.allSettled([...this.queues.values()]);
 	}
 
@@ -217,40 +227,123 @@ export class TaskRunner {
 	}
 
 	async handleOfferChange(change: RecordChange): Promise<void> {
-		const { author, collection, rkey } = change;
-		await this.enqueue(recordKey(change), async () => {
-			// A deleted offer is withdrawn
-			if (change.action === "delete" || change.record === undefined) {
-				const task = await this.dependencies.stores.tasks.findByRecord(
-					author,
-					collection,
-					rkey,
-				);
-				if (task !== undefined) {
-					await this.enqueue(task.taskId, () =>
-						this.withdrawOffer(task.taskId, author, rkey),
-					);
+		if (this.stopped || change.collection !== OFFER_COLLECTION) {
+			return;
+		}
+		const key = recordKey(change);
+		this.offerChanges.get(key)?.cancel?.();
+		const pending: PendingOfferChange = {
+			change: structuredClone(change),
+			failedAttempts: 0,
+		};
+		this.offerChanges.set(key, pending);
+		await this.processOfferChange(key, pending);
+	}
+
+	// Retry through the record and task queues, so deadlines and newer answers can supersede work
+	private async processOfferChange(
+		key: string,
+		pending: PendingOfferChange,
+	): Promise<void> {
+		await this.enqueue(key, async () => {
+			if (this.stopped || this.offerChanges.get(key) !== pending) {
+				return;
+			}
+			try {
+				await this.applyOfferChange(key, pending);
+				if (this.offerChanges.get(key) === pending) {
+					this.offerChanges.delete(key);
 				}
-				return;
+			} catch (error) {
+				this.onError(error);
+				if (this.stopped || this.offerChanges.get(key) !== pending) {
+					return;
+				}
+				pending.failedAttempts++;
+				if (pending.failedAttempts >= this.config.maxOfferStoreAttempts) {
+					this.offerChanges.delete(key);
+					return;
+				}
+				const { clock } = this.dependencies;
+				pending.cancel = clock.setTimer(
+					new Date(
+						clock.now().getTime() +
+							retryDelayMs(pending.failedAttempts, this.config),
+					),
+					() => {
+						pending.cancel = undefined;
+						void this.processOfferChange(key, pending);
+					},
+				);
 			}
-			const parsed = hivemind.agent.offer.main.safeParse(change.record);
-			if (!parsed.success) {
-				return;
-			}
-			const offer = parsed.value;
-			// An offer record stays with the task it was first written for
-			const linked = await this.dependencies.stores.tasks.findByRecord(
+		});
+	}
+
+	// Parse each attempt afresh; only the latest change of this inbox record may reach a task
+	private async applyOfferChange(
+		key: string,
+		pending: PendingOfferChange,
+	): Promise<void> {
+		const change = pending.change;
+		const { author, collection, rkey } = change;
+		// A deleted offer is withdrawn
+		if (change.action === "delete" || change.record === undefined) {
+			const task = await this.dependencies.stores.tasks.findByRecord(
 				author,
 				collection,
 				rkey,
 			);
-			if (linked !== undefined && linked.taskId !== offer.taskId) {
+			if (task !== undefined) {
+				await this.enqueueOfferChange(task.taskId, key, pending, () =>
+					this.withdrawOffer(task.taskId, author, rkey),
+				);
+			}
+			return;
+		}
+		const parsed = hivemind.agent.offer.main.safeParse(change.record);
+		if (!parsed.success) {
+			return;
+		}
+		const offer = parsed.value;
+		// An offer record stays with the task it was first written for
+		const linked = await this.dependencies.stores.tasks.findByRecord(
+			author,
+			collection,
+			rkey,
+		);
+		if (linked !== undefined && linked.taskId !== offer.taskId) {
+			return;
+		}
+		await this.enqueueOfferChange(offer.taskId, key, pending, () =>
+			this.receiveOffer(
+				offer.taskId,
+				{ agent: author, rkey, offer },
+				pending.failedAttempts > 0,
+			),
+		);
+	}
+
+	// Return storage failures to the offer retry loop; the general queue reports other task errors
+	private async enqueueOfferChange(
+		taskId: TaskId,
+		key: string,
+		pending: PendingOfferChange,
+		step: () => Promise<void>,
+	): Promise<void> {
+		let failure: { error: unknown } | undefined;
+		await this.enqueue(taskId, async () => {
+			if (this.stopped || this.offerChanges.get(key) !== pending) {
 				return;
 			}
-			await this.enqueue(offer.taskId, () =>
-				this.receiveOffer(offer.taskId, { agent: author, rkey, offer }),
-			);
+			try {
+				await step();
+			} catch (error) {
+				failure = { error };
+			}
 		});
+		if (failure) {
+			throw failure.error;
+		}
 	}
 
 	// * * * * * * * * * * * * * * * * * *
@@ -333,6 +426,7 @@ export class TaskRunner {
 	private async receiveOffer(
 		taskId: TaskId,
 		received: StoredOffer,
+		retrying = false,
 	): Promise<void> {
 		const { stores, clock } = this.dependencies;
 		const { agent, offer } = received;
@@ -344,7 +438,7 @@ export class TaskRunner {
 		}
 		if (
 			task.state.respondBy !== undefined &&
-			clock.now() > new Date(task.state.respondBy)
+			clock.now() >= new Date(task.state.respondBy)
 		) {
 			return;
 		}
@@ -356,6 +450,23 @@ export class TaskRunner {
 
 		// 3. An accept needs a payload that fits the request
 		if (offer.decision === "accept" && !this.offerFits(task, offer)) {
+			return;
+		}
+		// Eligibility checks can await a store; do not write if the window ended during them
+		if (
+			this.stopped ||
+			(task.state.respondBy !== undefined &&
+				clock.now() >= new Date(task.state.respondBy))
+		) {
+			return;
+		}
+		// A retry of an older record must not replace an answer already stored under a newer key
+		if (
+			retrying &&
+			task.offers.some(
+				(stored) => stored.agent === agent && stored.rkey !== received.rkey,
+			)
+		) {
 			return;
 		}
 
