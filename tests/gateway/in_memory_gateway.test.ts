@@ -1,11 +1,15 @@
 import assert from "node:assert/strict";
 import { describe, test } from "node:test";
+import { setImmediate } from "node:timers/promises";
 import {
 	LocalSimGateway,
 	LocalSimSpaceAuthority,
 } from "../../core/protocol/communication/in_memory/at_gateway_localsim.js";
 import { AtProtocolNetwork } from "../../core/protocol/communication/in_memory/at_protocol_network.js";
-import { SpaceAccessDeniedError } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
+import {
+	type RecordChange,
+	SpaceAccessDeniedError,
+} from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type {
 	Did,
 	TypedObject,
@@ -156,6 +160,47 @@ describe("in-memory: writes and procedures", () => {
 				"com.hivemind-network.coordinator.unknown",
 				{},
 			),
+		);
+	});
+
+	test("waits for delayed replay without losing writes during startup", async (t) => {
+		t.mock.timers.enable({ apis: ["setTimeout"] });
+		const world = createWorld(new AtProtocolNetwork({ deliveryDelayMs: 20 }));
+		const { gateway, authority } = world.coordinator;
+		const space = await authority.createSpace(
+			SPACE_TYPES.task,
+			"replay",
+			await loadPolicy("task.json", COORDINATOR),
+		);
+		const collection = "com.hivemind-network.test.record";
+		const initial = { $type: collection, version: 1 } as unknown as TypedObject;
+		const updated = { $type: collection, version: 2 } as unknown as TypedObject;
+		await gateway.putSpaceRecord(space, collection, "a", initial);
+		await gateway.putSpaceRecord(space, collection, "b", initial);
+
+		const changes: RecordChange[] = [];
+		let ready = false;
+		const watching = gateway.watchSpace(space, (change) =>
+			changes.push(change),
+		);
+		void watching.then((stop) => {
+			ready = true;
+			t.after(stop);
+		});
+		await setImmediate();
+		assert.equal(ready, false);
+		assert.deepEqual(changes, []);
+
+		await gateway.putSpaceRecord(space, collection, "a", updated);
+		t.mock.timers.tick(20);
+		await watching;
+		assert.deepEqual(
+			changes.map(({ action, rkey, record }) => ({ action, rkey, record })),
+			[
+				{ action: "create", rkey: "a", record: initial },
+				{ action: "create", rkey: "b", record: initial },
+				{ action: "update", rkey: "a", record: updated },
+			],
 		);
 	});
 

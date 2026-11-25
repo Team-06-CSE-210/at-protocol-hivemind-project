@@ -14,6 +14,7 @@ import type { TaskHandle } from "../../core/protocol/interfaces/internal/client_
 import type {
 	Nsid,
 	SpaceRef,
+	TaskState,
 	TypedObject,
 } from "../../core/protocol/interfaces/internal/types.js";
 import {
@@ -23,6 +24,7 @@ import {
 } from "../../core/protocol/protocol_config/space_definition.js";
 import {
 	HivemindRequester,
+	RequesterTask,
 	submitRequest,
 } from "../../hivemind_sdk/hivemind_requester.js";
 import {
@@ -190,6 +192,46 @@ async function writeRecord(
 		l.asUnknown$TypedObject(record),
 	);
 }
+
+test("ready waits for delayed task-space replay before selecting an option", async (t) => {
+	const network = new AtProtocolNetwork({ deliveryDelayMs: 20 });
+	const coordinator = new LocalSimGateway(network, COORDINATOR);
+	const authority = new LocalSimSpaceAuthority(network, COORDINATOR);
+	const rider = new LocalSimGateway(network, RIDER);
+	const taskId = taskIdFor("delayed-ready");
+	const space = await authority.createSpace(
+		SPACE_TYPES.task,
+		taskId,
+		await loadPolicy("task.json", COORDINATOR),
+	);
+	await authority.putMember(space, RIDER, { read: true, write: true });
+	const terms = rideOffer(taskId, 120).payload;
+	assert.ok(terms);
+	const options = [
+		{ optionId: "option-1", agent: TAXI_ONE, score: 1000, terms },
+	];
+	await writeRecord(coordinator, space, "self", {
+		$type: STATE,
+		phase: "awaitingSelection",
+		options,
+		selectBy: "2099-01-01T12:00:00.000Z",
+		updatedAt: timestamp(),
+	});
+
+	const task: TaskHandle = RequesterTask.follow(
+		{ coordinator: COORDINATOR, gateway: rider },
+		{ taskId, requestRkey: TID.nextStr() },
+	);
+	t.after(() => task.close());
+	await task.ready;
+
+	const states: TaskState[] = [];
+	task.onState((state) => states.push(state));
+	assert.equal(states.length, 1);
+	assert.equal(states[0].phase, "awaitingSelection");
+	assert.deepEqual(states[0].options, options);
+	await task.select("option-1");
+});
 
 async function startRide(t: TestContext, mode: "auto" | "choose") {
 	const network = new AtProtocolNetwork();

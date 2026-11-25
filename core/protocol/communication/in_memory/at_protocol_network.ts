@@ -225,23 +225,46 @@ export class AtProtocolNetwork {
 			);
 		}
 
-		// Replay the current records of every writer, as a first sync with getRepo would
+		// Replay the current records of every writer, as a first sync with getRepo would.
+		// Track delivery itself, including simulated latency, before resolving the watch.
+		const replay: Promise<void>[] = [];
 		for (const [writer, records] of stored.recordsByWriter) {
 			for (const [path, record] of records) {
 				const [collection, rkey] = splitPath(path);
-				this.deliver(onChange, {
-					action: "create",
-					author: writer,
-					collection,
-					rkey,
-					record,
-					space,
-				});
+				replay.push(
+					new Promise<void>((resolve, reject) => {
+						this.deliver(
+							(change) => {
+								try {
+									onChange(change);
+									resolve();
+								} catch (error) {
+									reject(error);
+								}
+							},
+							{
+								action: "create",
+								author: writer,
+								collection,
+								rkey,
+								record,
+								space,
+							},
+						);
+					}),
+				);
 			}
 		}
 
-		// Then deliver every new change
+		// Subscribe before waiting so writes during replay are not missed. Deliveries queued
+		// above still precede live changes, preserving each writer's order.
 		stored.listeners.add(onChange);
+		try {
+			await Promise.all(replay);
+		} catch (error) {
+			stored.listeners.delete(onChange);
+			throw error;
+		}
 		return () => {
 			stored.listeners.delete(onChange);
 		};

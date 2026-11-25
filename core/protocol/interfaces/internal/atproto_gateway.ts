@@ -63,6 +63,7 @@ export interface AtprotoGateway {
 	): Promise<void>;
 
 	// Following a space -> onChange called for every record already in it
+	// -> resolves after the initial replay has been delivered to onChange
 	// -> later changes arrive in order per writer (not across writers); if a record changes
 	//    several times between two syncs, only its latest state may arrive
 	// -> returns SpaceAccessDeniedError if account may not read the space
