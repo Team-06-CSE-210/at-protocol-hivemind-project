@@ -227,6 +227,80 @@ test("coordinator automatically retries a failed offer storage operation", async
 	assert.equal(attempts, 2);
 });
 
+test("a newer offer retries successfully and replaces an older stored offer with another key", async (t) => {
+	const world = await collectingHarness(t);
+	await world.sendOffer();
+	const put = world.stores.tasks.put.bind(world.stores.tasks);
+	let attempts = 0;
+	world.stores.tasks.put = async (task) => {
+		if (
+			task.offers.some(({ rkey }) => rkey === "3m5abcde23458") &&
+			++attempts === 1
+		) {
+			throw new Error("temporary database failure for the newer offer");
+		}
+		await put(task);
+	};
+	await world.taxi.putSpaceRecord(
+		world.intake,
+		hivemind.agent.offer.$nsid,
+		"3m5abcde23458",
+		l.asUnknown$TypedObject(rideOffer(world.dispatch.taskId, 90)),
+	);
+	await world.runner.settled();
+	assert.equal(world.errors.length, 1);
+	world.clock.advanceBy(DEFAULT_TASKS_CONFIG.firstRetryDelayMs);
+	await world.runner.settled();
+	const task = await world.stores.tasks.get(world.dispatch.taskId);
+	assert.ok(task);
+	assert.equal(attempts, 2);
+	assert.equal(task.offers.length, 1);
+	assert.equal(task.offers[0].rkey, "3m5abcde23458");
+	assert.deepEqual(
+		task.offers[0].offer.payload,
+		rideOffer(world.dispatch.taskId, 90).payload,
+	);
+});
+
+test("a later offer supersedes an earlier retry even when neither new offer was stored", async (t) => {
+	const world = await collectingHarness(t);
+	await world.sendOffer();
+	const put = world.stores.tasks.put.bind(world.stores.tasks);
+	const attempts = new Map<string, number>();
+	world.stores.tasks.put = async (task) => {
+		const key = task.offers[0]?.rkey;
+		if (key === "3m5abcde23458" || key === "3m5abcde23459") {
+			const count = (attempts.get(key) ?? 0) + 1;
+			attempts.set(key, count);
+			if (count === 1) {
+				throw new Error("temporary database failure");
+			}
+		}
+		await put(task);
+	};
+	for (const [key, eta] of [
+		["3m5abcde23458", 90],
+		["3m5abcde23459", 60],
+	] as const) {
+		await world.taxi.putSpaceRecord(
+			world.intake,
+			hivemind.agent.offer.$nsid,
+			key,
+			l.asUnknown$TypedObject(rideOffer(world.dispatch.taskId, eta)),
+		);
+		await world.runner.settled();
+	}
+	assert.equal(world.errors.length, 2);
+	world.clock.advanceBy(DEFAULT_TASKS_CONFIG.firstRetryDelayMs);
+	await world.runner.settled();
+	const task = await world.stores.tasks.get(world.dispatch.taskId);
+	assert.ok(task);
+	assert.equal(attempts.get("3m5abcde23458"), 1);
+	assert.equal(attempts.get("3m5abcde23459"), 2);
+	assert.equal(task.offers.length, 1);
+	assert.equal(task.offers[0].rkey, "3m5abcde23459");
+});
+
 for (const change of [
 	"updated",
 	"deleted",

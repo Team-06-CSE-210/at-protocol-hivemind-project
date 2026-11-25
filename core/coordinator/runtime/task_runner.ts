@@ -92,6 +92,8 @@ interface PendingRetry {
 
 interface PendingOfferChange extends PendingRetry {
 	change: RecordChange;
+	arrival: number;
+	answerKey?: string;
 }
 
 type StoredOffer = TaskRecord["offers"][number];
@@ -112,6 +114,9 @@ export class TaskRunner {
 	// Tasks whose writes are tried again; kept apart from running, as ended tasks may need it too
 	private readonly retries = new Map<TaskId, PendingRetry>();
 	private readonly offerChanges = new Map<string, PendingOfferChange>();
+	// Arrival order is independent of whether an answer reached storage successfully
+	private readonly latestOfferArrival = new Map<string, number>();
+	private nextOfferArrival = 0;
 	// Queues by task ID, and by "author collection rkey" for intake records
 	private readonly queues = new Map<string, Promise<void>>();
 	private readonly stopIntakes: Array<() => void> = [];
@@ -174,6 +179,7 @@ export class TaskRunner {
 			pending.cancel?.();
 		}
 		this.offerChanges.clear();
+		this.latestOfferArrival.clear();
 		await Promise.allSettled([...this.queues.values()]);
 	}
 
@@ -235,7 +241,15 @@ export class TaskRunner {
 		const pending: PendingOfferChange = {
 			change: structuredClone(change),
 			failedAttempts: 0,
+			arrival: ++this.nextOfferArrival,
 		};
+		if (change.action !== "delete") {
+			const parsed = hivemind.agent.offer.main.safeParse(change.record);
+			if (parsed.success) {
+				pending.answerKey = `${change.author} ${parsed.value.taskId}`;
+				this.latestOfferArrival.set(pending.answerKey, pending.arrival);
+			}
+		}
 		this.offerChanges.set(key, pending);
 		await this.processOfferChange(key, pending);
 	}
@@ -247,6 +261,10 @@ export class TaskRunner {
 	): Promise<void> {
 		await this.enqueue(key, async () => {
 			if (this.stopped || this.offerChanges.get(key) !== pending) {
+				return;
+			}
+			if (this.isOfferRetrySuperseded(pending)) {
+				this.offerChanges.delete(key);
 				return;
 			}
 			try {
@@ -315,11 +333,17 @@ export class TaskRunner {
 			return;
 		}
 		await this.enqueueOfferChange(offer.taskId, key, pending, () =>
-			this.receiveOffer(
-				offer.taskId,
-				{ agent: author, rkey, offer },
-				pending.failedAttempts > 0,
-			),
+			this.receiveOffer(offer.taskId, { agent: author, rkey, offer }, pending),
+		);
+	}
+
+	// Only an answer delivered after this one can supersede its retry for the same agent and task
+	private isOfferRetrySuperseded(pending: PendingOfferChange): boolean {
+		return (
+			pending.failedAttempts > 0 &&
+			pending.answerKey !== undefined &&
+			(this.latestOfferArrival.get(pending.answerKey) ?? pending.arrival) >
+				pending.arrival
 		);
 	}
 
@@ -426,7 +450,7 @@ export class TaskRunner {
 	private async receiveOffer(
 		taskId: TaskId,
 		received: StoredOffer,
-		retrying = false,
+		pending: PendingOfferChange,
 	): Promise<void> {
 		const { stores, clock } = this.dependencies;
 		const { agent, offer } = received;
@@ -460,13 +484,8 @@ export class TaskRunner {
 		) {
 			return;
 		}
-		// A retry of an older record must not replace an answer already stored under a newer key
-		if (
-			retrying &&
-			task.offers.some(
-				(stored) => stored.agent === agent && stored.rkey !== received.rkey,
-			)
-		) {
+		// A later answer may arrive while eligibility checks await storage
+		if (this.isOfferRetrySuperseded(pending)) {
 			return;
 		}
 
