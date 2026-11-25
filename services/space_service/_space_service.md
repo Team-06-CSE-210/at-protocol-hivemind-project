@@ -17,6 +17,8 @@ Every write must be idempotent: the coordinator repeats a write until it succeed
 
 The space layout itself (space types, policies, addresses) is protocol and stays in `core/protocol/`.
 
+Tests: `tests/services/space_service/atproto_spaces.test.ts` on the in-memory network. How the coordinator uses the service is tested in `tests/coordinator/runtime/` (`task_runner.test.ts`, `offer_routing.test.ts`).
+
 For S2, pass the coordinator's managed-space policy from `policy_types/offer_intake.json` to
 `setUpOfferIntake(policy)` after replacing `{coordinator}` with its DID. The existing constructor
 still takes the task-space policy. Combined `setUpIntakes` can call this method alongside request

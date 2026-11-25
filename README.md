@@ -38,7 +38,7 @@ To build and run only its local simulation tests, after `npm ci`:
 
 ```bash
 npm run build
-node --test dist/tests/hivemind_sdk/hivemind_agent.test.js dist/tests/coordinator/runtime/offer_routing.test.js
+node --test dist/tests/hivemind_sdk/hivemind_agent.test.js dist/tests/coordinator/runtime/offer_routing.test.js dist/tests/services/space_service/atproto_spaces.test.js
 ```
 
 These tests use `LocalSimGateway` and the coordinator's real access and collection code. They do

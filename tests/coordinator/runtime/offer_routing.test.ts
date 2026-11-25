@@ -6,7 +6,6 @@ import { DEFAULT_TASKS_CONFIG } from "../../../core/coordinator/config/tasks_con
 import { BillingRuntime } from "../../../core/coordinator/runtime/billing.js";
 import { TaskRunner } from "../../../core/coordinator/runtime/task_runner.js";
 import * as hivemind from "../../../core/protocol/generated/com/hivemind-network.js";
-import type { RecordChange } from "../../../core/protocol/interfaces/internal/atproto_gateway.js";
 import { AgentOfferRouter } from "../../../hivemind_sdk/hivemind_agent.js";
 import { eventually } from "../../gateway/gateway_contract.js";
 import { createOfferRoutingWorld } from "../../hivemind_sdk/offer_routing_world.js";
@@ -100,58 +99,6 @@ test("routes a feed dispatch through the offer inbox into the coordinator, then 
 	);
 	assert.deepEqual(errors, []);
 	assert.deepEqual(world.network.hiddenWrites, []);
-});
-
-test("offer inbox setup is repeatable and watches replay, updates and deletions of offers only", async (t) => {
-	const world = await createOfferRoutingWorld();
-	assert.equal(
-		await world.spaces.setUpOfferIntake(world.offerPolicy),
-		world.intake,
-	);
-	const offer = rideOffer(world.dispatch.taskId, 180);
-	const collection = hivemind.agent.offer.$nsid;
-	await world.taxi.putSpaceRecord(
-		world.intake,
-		collection,
-		"3m5abcde23456",
-		l.asUnknown$TypedObject(offer),
-	);
-	const changes: RecordChange[] = [];
-	const stop = await world.spaces.watchOfferIntake((change) => {
-		changes.push(change);
-	});
-	t.after(stop);
-	await eventually(() => assert.equal(changes.length, 1));
-	assert.equal(changes[0].action, "create");
-	await world.taxi.putSpaceRecord(
-		world.intake,
-		collection,
-		"3m5abcde23456",
-		l.asUnknown$TypedObject({ ...offer, decision: "decline" }),
-	);
-	await world.taxi.deleteSpaceRecord(world.intake, collection, "3m5abcde23456");
-	await world.taxi.putSpaceRecord(
-		world.intake,
-		"com.example.unrelated",
-		"unrelated",
-		l.asUnknown$TypedObject({ $type: "com.example.unrelated" }),
-	);
-	await eventually(() =>
-		assert.deepEqual(
-			changes.map((change) => change.action),
-			["create", "update", "delete"],
-		),
-	);
-	stop();
-	await world.taxi.putSpaceRecord(
-		world.intake,
-		collection,
-		"3m5abcde23456",
-		l.asUnknown$TypedObject(offer),
-	);
-	// A timer turn flushes the local network's queued deliveries
-	await new Promise<void>((resolve) => setImmediate(resolve));
-	assert.equal(changes.length, 3);
 });
 
 // Open a collecting task; the second seeded taxi keeps collection open after the first answers.
