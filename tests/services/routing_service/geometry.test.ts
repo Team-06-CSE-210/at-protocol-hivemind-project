@@ -62,6 +62,24 @@ const U_SHAPE: GeoPolygon = {
 	],
 };
 
+// A diamond of 0.01° with corners pointing south, east, north and west. Its east and west corners
+// lie at 32.705°, the north corner at 32.71°.
+//
+//   (32.71)        N
+//                /   \
+//   (32.705)    W     E
+//                \   /
+//   (32.70)        S
+//            -117.17  -117.16
+const DIAMOND: GeoPolygon = {
+	points: [
+		point(327_000_000, -1_171_650_000),
+		point(327_050_000, -1_171_600_000),
+		point(327_100_000, -1_171_650_000),
+		point(327_050_000, -1_171_700_000),
+	],
+};
+
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Tests
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -79,6 +97,21 @@ describe("isInsideCircle", () => {
 		assert.equal(
 			isInsideCircle(northOf(LITTLE_ITALY, 1_001), DOWNTOWN_CIRCLE),
 			false,
+		);
+	});
+
+	it("contains a point exactly on its border", () => {
+		// Integer E7 coordinates almost never lie an integer number of meters from the center, so
+		// the radius is set to the computed distance itself (not an integer, which a feed
+		// declaration would require): this checks the comparison, <= and not <
+		const onBorder = northOf(LITTLE_ITALY, 1_000);
+		const exactRadius = distanceMeters(onBorder, LITTLE_ITALY);
+		assert.equal(
+			isInsideCircle(onBorder, {
+				center: LITTLE_ITALY,
+				radiusMeters: exactRadius,
+			}),
+			true,
 		);
 	});
 
@@ -187,6 +220,31 @@ describe("isInsidePolygon", () => {
 		// The ray east from here passes the tops of both arms
 		assert.equal(
 			isInsidePolygon(point(327_200_000, -1_171_800_000), U_SHAPE),
+			false,
+		);
+	});
+
+	it("counts a ray through a convex corner once", () => {
+		// Inside, on the latitude of the east and west corners: the ray leaves through the east
+		// corner, which two edges share. Counting it for both edges would make this point outside.
+		assert.equal(
+			isInsidePolygon(point(327_050_000, -1_171_670_000), DIAMOND),
+			true,
+		);
+		// West of the diamond on the same latitude: the ray enters at the west corner and leaves at
+		// the east corner
+		assert.equal(
+			isInsidePolygon(point(327_050_000, -1_171_730_000), DIAMOND),
+			false,
+		);
+		// West of the north corner: the ray only touches the corner from outside
+		assert.equal(
+			isInsidePolygon(point(327_100_000, -1_171_680_000), DIAMOND),
+			false,
+		);
+		// East of the diamond on the corners' latitude
+		assert.equal(
+			isInsidePolygon(point(327_050_000, -1_171_580_000), DIAMOND),
 			false,
 		);
 	});
