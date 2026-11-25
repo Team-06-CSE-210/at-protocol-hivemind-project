@@ -49,6 +49,7 @@ const ride = {
 	passengers: 2,
 };
 
+// A Gateway that keeps every write instead of sending it
 function recordingGateway() {
 	const writes: Array<{
 		space: SpaceRef;
@@ -74,8 +75,9 @@ function recordingGateway() {
 	};
 }
 
-test("submitRequest writes one valid request into the intake", async () => {
+test("submitRequest writes one request record into the coordinator's request intake", async () => {
 	const { writes, dependencies } = recordingGateway();
+
 	const { taskId, requestRkey } = await submitRequest(dependencies, ride, {
 		selectionMode: "choose",
 		maxWaitMs: 5_000,
@@ -84,8 +86,13 @@ test("submitRequest writes one valid request into the intake", async () => {
 	assert.equal(writes.length, 1);
 	const [write] = writes;
 	assert.equal(write.space, requestIntakeSpaceRef(SUBMIT_COORDINATOR));
-	assert.equal(write.collection, hivemind.requester.request.$nsid);
+	assert.equal(write.collection, "com.hivemind-network.requester.request");
+	// The record key is a fresh TID; the task ID is a separate field the requester chose
 	assert.equal(write.rkey, requestRkey);
+	assert.match(
+		requestRkey,
+		/^[234567abcdefghij][234567abcdefghijklmnopqrstuvwxyz]{12}$/,
+	);
 	assert.notEqual(requestRkey, taskId);
 	const record = hivemind.requester.request.main.parse(write.record);
 	assert.equal(record.taskId, taskId);

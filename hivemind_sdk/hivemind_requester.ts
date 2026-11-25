@@ -82,7 +82,7 @@ export async function submitRequest(
 	// task type, which the task type's module adds (e.g. pickup and dropoff differ for a ride).
 	const taskId = createTaskId();
 	const request = hivemind.requester.request.main.parse({
-		$type: REQUEST_COLLECTION,
+		$type: hivemind.requester.request.$nsid,
 		taskId,
 		payload,
 		...(selectionMode === undefined ? {} : { selectionMode }),
@@ -101,7 +101,7 @@ export async function submitRequest(
 	const requestRkey = TID.nextStr();
 	await gateway.putSpaceRecord(
 		requestIntakeSpaceRef(coordinator),
-		REQUEST_COLLECTION,
+		hivemind.requester.request.$nsid,
 		requestRkey,
 		l.asUnknown$TypedObject(request),
 	);

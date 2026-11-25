@@ -24,10 +24,12 @@ Every folder has an overview doc named `_<folder>.md`. Imports point toward `cor
 | --- | --- |
 | `npm ci` | installs the pinned atproto packages exactly as locked (ADR-001) |
 | `npm run build` | generates the lexicon code and compiles everything to `dist/` |
-| `npm test` | builds, then runs every test, including the gateway contract and the coordinator's identity against an in-process PDS |
+| `npm test` | builds in a temporary directory, then runs every test, including the gateway contract and the coordinator's identity against an in-process PDS |
 | `npm run typecheck` | generates the lexicon code and type-checks without writing `dist/` |
 | `npm run check` | Biome lint and format check |
 | `npm run fix` | applies Biome's fixes |
+
+The [CI workflow](.github/workflows/ci.yml) runs `npm ci`, `npm run check`, and `npm test` with the Node version in `.nvmrc` on pull requests and pushes to `develop` and `main`. Keep shared TypeScript module tests under `tests/` so the repository check runs them automatically. Add a separate job when a module needs a different toolchain or infrastructure.
 
 ## Running the demo locally
 
@@ -57,32 +59,30 @@ npm test
 
 The tests start their own PDSes and make their own keys, so they need no secrets. `tests/coordinator/published_identity.test.ts` already plays a small part of the demo: a rider registers and writes a request, and the PDS asks the coordinator whether it may.
 
-### 3. Make a local attestation key
+### 3. Create a local `.env`
 
-Once is enough; you can reuse the key or make a new one whenever you like. Keep it outside the repository:
+Run this once from the repository root to generate a local account password and a P-256 attestation key. The command preserves an existing `.env`.
 
-```
-node dist/scripts/generate_attestation_key.js > ~/hivemind-attestation.key
-chmod 600 ~/hivemind-attestation.key
-```
-
-The private key goes into the file. The terminal only shows the public `did:key`.
-
-### 4. Set the secrets
-
-In every terminal that starts the PDS or the coordinator. The first line waits for you to type a password (any one, nothing is shown) and press Enter; this keeps it out of your shell history:
-
-```
-read -rs HIVEMIND_ACCOUNT_PASSWORD && export HIVEMIND_ACCOUNT_PASSWORD
-export HIVEMIND_ATTESTATION_KEY="$(cat ~/hivemind-attestation.key)"
+```bash
+(
+  umask 077
+  set -o noclobber
+  password=$(node -p 'require("node:crypto").randomBytes(24).toString("hex")') &&
+  key=$(node dist/scripts/generate_attestation_key.js) &&
+  printf 'HIVEMIND_ACCOUNT_PASSWORD=%s\nHIVEMIND_ATTESTATION_KEY=%s\n' "$password" "$key" > .env
+)
 ```
 
-Use the same password and key in both terminals.
+The terminal shows the public `did:key`. See [`.env.example`](.env.example) for the variable names if you already have local credentials.
+
+### 4. Load the local environment
+
+Use Node’s `--env-file=.env` flag for local processes that need the coordinator credentials. The dev PDS and coordinator must use the same password and key. Existing shell exports take precedence over values in the file.
 
 ### 5. Start the local Hivemind PDS (terminal 1)
 
 ```
-node dist/core/hivemind_pds/start_local.js
+node --env-file=.env dist/core/hivemind_pds/start_local.js
 ```
 
 It starts a PDS and a PLC directory, creates the coordinator's account (`coordinator.test`) and publishes its two DID entries: `#hivemind_coordinator` (pointing at `http://localhost:2590`) and `#hivemind_attestation` (the `did:key` from step 3). It prints the PDS and PLC URLs and the coordinator's DID; the next steps need them. Leave it running.
@@ -135,11 +135,7 @@ A map in `view/` (empty so far) will show the zones and the moving taxis; `TaxiB
 
 ### 12. Stop
 
-1. Press Ctrl+C in each terminal: fleet, coordinator, then the PDS.
-2. Clear the secrets (closing the terminals does the same):
-   ```
-   unset HIVEMIND_ACCOUNT_PASSWORD HIVEMIND_ATTESTATION_KEY
-   ```
+Press Ctrl+C in each terminal, starting with the fleet, then the coordinator, then the PDS.
 
 ### Missing parts
 
@@ -163,12 +159,12 @@ The coordinator has two secrets, both read from environment variables only (`cor
 
 Locally:
 
-- Any password and any key work. Every teammate uses their own; nothing is shared.
+- Each teammate generates their own local credentials in `.env`.
 - `start_local.js` publishes the key it is started with. After changing the key, restart it. The coordinator must use the same key, or it refuses to start.
 
 Always:
 
-- Never commit a key or password. Keep key files outside the repository; `.env` files are ignored by git.
+- Git ignores the local `.env`. Keep `.env.example` free of secrets.
 - Never paste the private key into chat, issues or a shared screen. What the scripts print (URLs, DIDs, the `did:key`) is public.
 - Don't put the secrets in `~/.bashrc` or type them on the command line, where your shell history keeps them.
 
