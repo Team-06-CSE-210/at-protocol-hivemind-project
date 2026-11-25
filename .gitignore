@@ -46,3 +46,6 @@ pnpm-debug.log*
 .Trashes
 .VolumeIcon.icns
 .com.apple.timemachine.donotpresent
+
+# Generated contracts
+/protocol/generated
