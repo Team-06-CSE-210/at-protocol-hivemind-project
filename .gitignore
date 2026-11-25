@@ -2,6 +2,7 @@
 node_modules/
 dist/
 core/protocol/generated/
+protocol/generated/
 coverage/
 .cache/
 *.tsbuildinfo

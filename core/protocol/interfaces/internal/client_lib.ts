@@ -75,6 +75,8 @@ export interface RequesterClient {
 
 export interface TaskHandle {
 	readonly taskId: TaskId;
+	/** Resolves after the task space's first sync; rejects if following fails for a reason other than the space not being ready yet. */
+	readonly ready: Promise<void>;
 	/** Each listener returns a function that removes it. */
 	onState(listener: (state: TaskState) => void): () => void;
 	onAssignment(listener: (assignment: Assignment) => void): () => void;
@@ -82,6 +84,8 @@ export interface TaskHandle {
 	select(optionId: string): Promise<void>;
 	/** Delete the request, which cancels the task. */
 	cancel(): Promise<void>;
+	/** Stop following the task and release the space watch. Cached values remain available to new listeners. */
+	close(): void;
 }
 
 // Organization side (operators and feed owners)
