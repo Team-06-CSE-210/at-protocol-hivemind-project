@@ -100,10 +100,11 @@ interface PendingOfferChange extends PendingRetry {
 
 type StoredOffer = TaskRecord["offers"][number];
 
-const REQUEST_COLLECTION = "com.hivemind-network.requester.request";
-const OFFER_COLLECTION = "com.hivemind-network.agent.offer";
-const SELECTION_COLLECTION = "com.hivemind-network.requester.selection";
-const PROGRESS_COLLECTION = "com.hivemind-network.agent.progress";
+// Record names from the generated lexicon code
+const REQUEST_COLLECTION = hivemind.requester.request.$nsid;
+const OFFER_COLLECTION = hivemind.agent.offer.$nsid;
+const SELECTION_COLLECTION = hivemind.requester.selection.$nsid;
+const PROGRESS_COLLECTION = hivemind.agent.progress.$nsid;
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Task Runner
