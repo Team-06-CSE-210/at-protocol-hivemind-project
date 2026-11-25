@@ -305,6 +305,45 @@ test("ignores expired or invalid dispatches and rejects accepts without terms", 
 	assert.equal(world.sent.length, 0);
 });
 
+for (const refused of ["another task type", "too few seats"] as const) {
+	test(`reports and does not write an accept with ${refused}`, async (t) => {
+		const world = await harness();
+		t.after(() => world.router.stop());
+		const { payload } = rideOffer(world.dispatch.taskId, 180);
+		assert.ok(payload);
+		world.dependencies.behavior = {
+			onDispatch: async () => ({
+				decision: "accept",
+				payload:
+					refused === "another task type"
+						? l.asUnknown$TypedObject({
+								$type: "com.example.delivery#offer",
+								parcel: "small",
+							})
+						: payload,
+			}),
+		};
+		await world.router.start();
+		// The offer's vehicle seats 4, so five passengers cannot ride
+		const fivePassengers = {
+			...world.dispatch.payload,
+			passengers: 5,
+		} as typeof world.dispatch.payload;
+		await world.publish({
+			...world.dispatch,
+			payload:
+				refused === "too few seats" ? fivePassengers : world.dispatch.payload,
+		});
+		await eventually(() => assert.equal(world.errors.length, 1));
+		assert.match(
+			String(world.errors[0]),
+			refused === "too few seats" ? /4 seats for 5 passengers/ : /ride/,
+		);
+		assert.equal(world.sent.length, 0);
+		assert.deepEqual(world.network.hiddenWrites, []);
+	});
+}
+
 test("drops dispatches whose writer is not the configured coordinator", async (t) => {
 	const world = await harness();
 	t.after(() => world.router.stop());

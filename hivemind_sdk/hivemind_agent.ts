@@ -20,6 +20,10 @@ import {
 	offerIntakeSpaceRef,
 } from "../core/protocol/protocol_config/space_definition.js";
 import {
+	moduleForPayload,
+	taskTypeOf,
+} from "../core/protocol/type_definition/task_types/task_index.js";
+import {
 	DEFAULT_OFFER_ROUTING_CONFIG,
 	type OfferRoutingConfig,
 } from "./offer_routing_config.js";
@@ -266,9 +270,25 @@ export class AgentOfferRouter {
 						createdAt: l.toDatetimeString(this.now()),
 					}),
 				);
-				if (offer.decision === "accept" && offer.payload === undefined) {
-					throw new Error(
-						"AgentOfferRouter: an accepted offer needs a payload",
+				if (offer.decision === "accept") {
+					if (offer.payload === undefined) {
+						throw new Error(
+							"AgentOfferRouter: an accepted offer needs a payload",
+						);
+					}
+					// The coordinator checks accepted terms with the task type's module and drops
+					// those that fail without telling the agent. Check them here against the dispatch
+					// (coarsening keeps what the checks read), so a refused answer is reported
+					// through onError and not written
+					const taskTypeModule = moduleForPayload(pending.dispatch.payload);
+					if (taskTypeModule === undefined) {
+						throw new Error(
+							`AgentOfferRouter: unsupported task type ${taskTypeOf(pending.dispatch.payload)}`,
+						);
+					}
+					taskTypeModule.parseOffer(
+						l.asUnknown$TypedObject(offer.payload),
+						pending.dispatch.payload,
 					);
 				}
 				// Keep the decision even if generating a record key or writing fails
