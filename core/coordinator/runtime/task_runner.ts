@@ -90,11 +90,21 @@ interface PendingRetry {
 	cancel?: () => void;
 }
 
+interface PendingOfferChange extends PendingRetry {
+	change: RecordChange;
+	arrival: number;
+	answerKey?: string;
+	// When the change arrived, in ms; it can only matter for maxAnswerWindowMs after that
+	arrivedAt: number;
+}
+
 type StoredOffer = TaskRecord["offers"][number];
 
-const REQUEST_COLLECTION = "com.hivemind-network.requester.request";
-const SELECTION_COLLECTION = "com.hivemind-network.requester.selection";
-const PROGRESS_COLLECTION = "com.hivemind-network.agent.progress";
+// Record names from the generated lexicon code
+const REQUEST_COLLECTION = hivemind.requester.request.$nsid;
+const OFFER_COLLECTION = hivemind.agent.offer.$nsid;
+const SELECTION_COLLECTION = hivemind.requester.selection.$nsid;
+const PROGRESS_COLLECTION = hivemind.agent.progress.$nsid;
 
 // ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 // Task Runner
@@ -106,6 +116,13 @@ export class TaskRunner {
 	private readonly running = new Map<TaskId, RunningTask>();
 	// Tasks whose writes are tried again; kept apart from running, as ended tasks may need it too
 	private readonly retries = new Map<TaskId, PendingRetry>();
+	private readonly offerChanges = new Map<string, PendingOfferChange>();
+	// Arrival order is independent of whether an answer reached storage successfully
+	private readonly latestOfferArrival = new Map<string, number>();
+	private nextOfferArrival = 0;
+	// The task each agent is assigned to, until that task ends: an agent holds at most one active
+	// task (ADR-008). Rebuilt from the stored tasks at start
+	private readonly activeTaskOfAgent = new Map<Did, TaskId>();
 	// Queues by task ID, and by "author collection rkey" for intake records
 	private readonly queues = new Map<string, Promise<void>>();
 	private readonly stopIntakes: Array<() => void> = [];
@@ -127,8 +144,16 @@ export class TaskRunner {
 		const { stores, spaces } = this.dependencies;
 
 		// 1. Resume tasks with work left first, so intake records already handled find their task.
+		//    Agents that hold an assigned task count as occupied before anything is assigned.
 		//    A task that fails to resume is tried again on its own; the others go on
-		for (const task of await stores.tasks.listOpen()) {
+		const openTasks = await stores.tasks.listOpen();
+		for (const task of openTasks) {
+			const { phase, assignedAgent } = task.state;
+			if (phase === "assigned" && assignedAgent !== undefined) {
+				this.activeTaskOfAgent.set(assignedAgent, task.taskId);
+			}
+		}
+		for (const task of openTasks) {
 			await this.enqueue(task.taskId, () => this.resume(task.taskId));
 		}
 
@@ -164,6 +189,13 @@ export class TaskRunner {
 			retry.cancel?.();
 		}
 		this.retries.clear();
+		for (const pending of this.offerChanges.values()) {
+			pending.cancel?.();
+		}
+		this.offerChanges.clear();
+		this.latestOfferArrival.clear();
+		// start() rebuilds them from the stored tasks
+		this.activeTaskOfAgent.clear();
 		await Promise.allSettled([...this.queues.values()]);
 	}
 
@@ -217,40 +249,143 @@ export class TaskRunner {
 	}
 
 	async handleOfferChange(change: RecordChange): Promise<void> {
-		const { author, collection, rkey } = change;
-		await this.enqueue(recordKey(change), async () => {
-			// A deleted offer is withdrawn
-			if (change.action === "delete" || change.record === undefined) {
-				const task = await this.dependencies.stores.tasks.findByRecord(
-					author,
-					collection,
-					rkey,
-				);
-				if (task !== undefined) {
-					await this.enqueue(task.taskId, () =>
-						this.withdrawOffer(task.taskId, author, rkey),
-					);
-				}
-				return;
-			}
+		if (this.stopped || change.collection !== OFFER_COLLECTION) {
+			return;
+		}
+		const key = recordKey(change);
+		this.offerChanges.get(key)?.cancel?.();
+		const pending: PendingOfferChange = {
+			change: structuredClone(change),
+			failedAttempts: 0,
+			arrival: ++this.nextOfferArrival,
+			arrivedAt: this.dependencies.clock.now().getTime(),
+		};
+		if (change.action !== "delete") {
 			const parsed = hivemind.agent.offer.main.safeParse(change.record);
-			if (!parsed.success) {
+			if (parsed.success) {
+				pending.answerKey = `${change.author} ${parsed.value.taskId}`;
+				this.latestOfferArrival.set(pending.answerKey, pending.arrival);
+			}
+		}
+		this.offerChanges.set(key, pending);
+		await this.processOfferChange(key, pending);
+	}
+
+	// Retry through the record and task queues, so deadlines and newer answers can supersede work
+	private async processOfferChange(
+		key: string,
+		pending: PendingOfferChange,
+	): Promise<void> {
+		await this.enqueue(key, async () => {
+			if (this.stopped || this.offerChanges.get(key) !== pending) {
 				return;
 			}
-			const offer = parsed.value;
-			// An offer record stays with the task it was first written for
-			const linked = await this.dependencies.stores.tasks.findByRecord(
+			if (this.isOfferRetrySuperseded(pending)) {
+				this.offerChanges.delete(key);
+				return;
+			}
+			try {
+				await this.applyOfferChange(key, pending);
+				if (this.offerChanges.get(key) === pending) {
+					this.offerChanges.delete(key);
+				}
+			} catch (error) {
+				this.onError(error);
+				if (this.stopped || this.offerChanges.get(key) !== pending) {
+					return;
+				}
+				pending.failedAttempts++;
+				// Try again with the delays of ADR-007 while the change can still matter (ADR-009).
+				// Offers and withdrawals only count while their task collects, and a task opened
+				// before the change arrived stops collecting within maxAnswerWindowMs of it; once
+				// the task has stopped collecting, the next attempt does nothing and ends the retries
+				const { clock } = this.dependencies;
+				const retryAt =
+					clock.now().getTime() +
+					retryDelayMs(pending.failedAttempts, this.config);
+				if (retryAt >= pending.arrivedAt + this.config.maxAnswerWindowMs) {
+					this.offerChanges.delete(key);
+					return;
+				}
+				pending.cancel = clock.setTimer(new Date(retryAt), () => {
+					pending.cancel = undefined;
+					void this.processOfferChange(key, pending);
+				});
+			}
+		});
+	}
+
+	// Parse each attempt afresh; only the latest change of this inbox record may reach a task
+	private async applyOfferChange(
+		key: string,
+		pending: PendingOfferChange,
+	): Promise<void> {
+		const change = pending.change;
+		const { author, collection, rkey } = change;
+		// A deleted offer is withdrawn
+		if (change.action === "delete" || change.record === undefined) {
+			const task = await this.dependencies.stores.tasks.findByRecord(
 				author,
 				collection,
 				rkey,
 			);
-			if (linked !== undefined && linked.taskId !== offer.taskId) {
+			if (task !== undefined) {
+				await this.enqueueOfferChange(task.taskId, key, pending, () =>
+					this.withdrawOffer(task.taskId, author, rkey),
+				);
+			}
+			return;
+		}
+		const parsed = hivemind.agent.offer.main.safeParse(change.record);
+		if (!parsed.success) {
+			return;
+		}
+		const offer = parsed.value;
+		// An offer record stays with the task it was first written for
+		const linked = await this.dependencies.stores.tasks.findByRecord(
+			author,
+			collection,
+			rkey,
+		);
+		if (linked !== undefined && linked.taskId !== offer.taskId) {
+			return;
+		}
+		await this.enqueueOfferChange(offer.taskId, key, pending, () =>
+			this.receiveOffer(offer.taskId, { agent: author, rkey, offer }, pending),
+		);
+	}
+
+	// Only an answer delivered after this one can supersede its retry for the same agent and task
+	private isOfferRetrySuperseded(pending: PendingOfferChange): boolean {
+		return (
+			pending.failedAttempts > 0 &&
+			pending.answerKey !== undefined &&
+			(this.latestOfferArrival.get(pending.answerKey) ?? pending.arrival) >
+				pending.arrival
+		);
+	}
+
+	// Return storage failures to the offer retry loop; the general queue reports other task errors
+	private async enqueueOfferChange(
+		taskId: TaskId,
+		key: string,
+		pending: PendingOfferChange,
+		step: () => Promise<void>,
+	): Promise<void> {
+		let failure: { error: unknown } | undefined;
+		await this.enqueue(taskId, async () => {
+			if (this.stopped || this.offerChanges.get(key) !== pending) {
 				return;
 			}
-			await this.enqueue(offer.taskId, () =>
-				this.receiveOffer(offer.taskId, { agent: author, rkey, offer }),
-			);
+			try {
+				await step();
+			} catch (error) {
+				failure = { error };
+			}
 		});
+		if (failure) {
+			throw failure.error;
+		}
 	}
 
 	// * * * * * * * * * * * * * * * * * *
@@ -333,6 +468,7 @@ export class TaskRunner {
 	private async receiveOffer(
 		taskId: TaskId,
 		received: StoredOffer,
+		pending: PendingOfferChange,
 	): Promise<void> {
 		const { stores, clock } = this.dependencies;
 		const { agent, offer } = received;
@@ -344,7 +480,7 @@ export class TaskRunner {
 		}
 		if (
 			task.state.respondBy !== undefined &&
-			clock.now() > new Date(task.state.respondBy)
+			clock.now() >= new Date(task.state.respondBy)
 		) {
 			return;
 		}
@@ -356,6 +492,18 @@ export class TaskRunner {
 
 		// 3. An accept needs a payload that fits the request
 		if (offer.decision === "accept" && !this.offerFits(task, offer)) {
+			return;
+		}
+		// Eligibility checks can await a store; do not write if the window ended during them
+		if (
+			this.stopped ||
+			(task.state.respondBy !== undefined &&
+				clock.now() >= new Date(task.state.respondBy))
+		) {
+			return;
+		}
+		// A later answer may arrive while eligibility checks await storage
+		if (this.isOfferRetrySuperseded(pending)) {
 			return;
 		}
 
@@ -437,25 +585,23 @@ export class TaskRunner {
 			return;
 		}
 
-		// 3. Auto mode: the best option wins
+		// 3. Auto mode: the best option from an agent that is still free wins
 		const offerByOption = new Map(
 			accepted.map((stored, index) => [optionIdFor(index), stored]),
 		);
 		if (phase === "assigned") {
-			const winner = offerByOption.get(ranked[0].optionId);
-			if (winner === undefined) {
-				await this.finish(task, "noOffers");
-				return;
-			}
-			await this.assign(task, winner);
+			await this.assign(
+				task,
+				ranked.flatMap(({ optionId }) => offerByOption.get(optionId) ?? []),
+			);
 			return;
 		}
 
-		// 4. Choose mode: the requester picks before selectBy
+		// 4. Choose mode: the requester picks before selectBy, among agents that are still free
 		const options: OfferOption[] = [];
 		for (const { optionId, score } of ranked) {
 			const stored = offerByOption.get(optionId);
-			if (stored === undefined) {
+			if (stored === undefined || this.isOccupied(stored.agent, taskId)) {
 				continue;
 			}
 			options.push({
@@ -465,6 +611,10 @@ export class TaskRunner {
 				headline: module.headline(parsedOfferByOption.get(optionId)),
 				terms: offerPayload(stored),
 			});
+		}
+		if (options.length === 0) {
+			await this.finish(task, "noOffers");
+			return;
 		}
 		task.state = {
 			...taskState("awaitingSelection", now),
@@ -478,8 +628,21 @@ export class TaskRunner {
 	// Assignment and end phases
 	// * * * * * * * * * * * * * * * * * *
 
-	private async assign(task: TaskRecord, winner: StoredOffer): Promise<void> {
-		const { signer, clock } = this.dependencies;
+	// Assign the first candidate whose agent is still free; with none free the task ends in noOffers.
+	// The check and the reservation run without an await in between, so two tasks that close at the
+	// same moment cannot both take one agent (ADR-008)
+	private async assign(
+		task: TaskRecord,
+		candidates: StoredOffer[],
+	): Promise<void> {
+		const { signer, clock, stores } = this.dependencies;
+		const winner = candidates.find(({ agent }) =>
+			this.reserveAgent(agent, task.taskId),
+		);
+		if (winner === undefined) {
+			await this.finish(task, "noOffers");
+			return;
+		}
 		const now = clock.now();
 
 		// 1. The signed assignment carries the exact request and the winner's terms
@@ -501,7 +664,42 @@ export class TaskRunner {
 		//    The task space watch then waits for its progress
 		task.assignment = assignment;
 		task.state = { ...taskState("assigned", now), assignedAgent: winner.agent };
-		await this.commit(task);
+		try {
+			await this.commit(task);
+		} catch (error) {
+			// Free the agent again only if the assignment is known not to be stored. If that cannot
+			// be read either, it stays reserved until the next start rebuilds the reservations
+			let stored: TaskRecord | undefined;
+			try {
+				stored = await stores.tasks.get(task.taskId);
+			} catch {
+				throw error;
+			}
+			if (stored?.state.assignedAgent !== winner.agent) {
+				this.freeAgent(winner.agent, task.taskId);
+			}
+			throw error;
+		}
+	}
+
+	// An agent is occupied while another task it is assigned to has not ended
+	private isOccupied(agent: Did, taskId: TaskId): boolean {
+		const activeTask = this.activeTaskOfAgent.get(agent);
+		return activeTask !== undefined && activeTask !== taskId;
+	}
+
+	private reserveAgent(agent: Did, taskId: TaskId): boolean {
+		if (this.isOccupied(agent, taskId)) {
+			return false;
+		}
+		this.activeTaskOfAgent.set(agent, taskId);
+		return true;
+	}
+
+	private freeAgent(agent: Did | undefined, taskId: TaskId): void {
+		if (agent !== undefined && this.activeTaskOfAgent.get(agent) === taskId) {
+			this.activeTaskOfAgent.delete(agent);
+		}
 	}
 
 	private async finish(task: TaskRecord, phase: TaskPhase): Promise<void> {
@@ -561,13 +759,26 @@ export class TaskRunner {
 			if (!parsed.success || deadlinePassed) {
 				return;
 			}
-			const option = task.state.options?.find(
+			const options = task.state.options ?? [];
+			const chosen = options.find(
 				({ optionId }) => optionId === parsed.value.optionId,
 			);
-			const winner = task.offers.find(({ agent }) => agent === option?.agent);
-			if (winner !== undefined) {
-				await this.assign(task, winner);
+			if (chosen === undefined) {
+				return;
 			}
+			// If the chosen agent took another task meanwhile, the next free option in ranked
+			// order is assigned instead
+			const ordered = [
+				chosen,
+				...options.filter((option) => option !== chosen),
+			];
+			await this.assign(
+				task,
+				ordered.flatMap(
+					(option) =>
+						task.offers.find(({ agent }) => agent === option.agent) ?? [],
+				),
+			);
 			return;
 		}
 
@@ -622,6 +833,7 @@ export class TaskRunner {
 		await this.dependencies.stores.tasks.put(task);
 		if (isEndPhase(task.state.phase)) {
 			this.release(task.taskId);
+			this.freeAgent(task.state.assignedAgent, task.taskId);
 		} else {
 			this.armTimer(task);
 		}

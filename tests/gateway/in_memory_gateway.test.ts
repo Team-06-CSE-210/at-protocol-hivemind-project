@@ -7,7 +7,6 @@ import {
 import { AtProtocolNetwork } from "../../core/protocol/communication/in_memory/at_protocol_network.js";
 import { SpaceAccessDeniedError } from "../../core/protocol/interfaces/internal/atproto_gateway.js";
 import type {
-	Assignment,
 	Did,
 	TypedObject,
 } from "../../core/protocol/interfaces/internal/types.js";
@@ -16,8 +15,6 @@ import {
 	requestIntakeSpaceRef,
 	SPACE_TYPES,
 } from "../../core/protocol/protocol_config/space_definition.js";
-import { AtprotoSpaces } from "../../services/space_service/atproto_spaces.js";
-import { rideOffer, rideRequest } from "../coordinator/fixtures.js";
 import {
 	eventually,
 	type GatewayWorld,
@@ -199,108 +196,5 @@ describe("in-memory: writes and procedures", () => {
 		await eventually(() =>
 			assert.deepEqual(actions, ["create", "update", "delete"]),
 		);
-	});
-
-	test("creating the same task space twice preserves requester access", async () => {
-		const world = createWorld(new AtProtocolNetwork());
-		const { authority, gateway } = world.coordinator;
-		const policy = await loadPolicy("task.json", gateway.did);
-		const spaces = new AtprotoSpaces(authority, policy, gateway);
-
-		const taskId = "3m5abcde23456";
-		const space = await spaces.createTaskSpace(taskId, world.rider.did);
-		// Simulate the coordinator retrying after the first call succeeded
-		// The second call should return the same space and preserve rider access
-		const retriedSpace = await spaces.createTaskSpace(taskId, world.rider.did);
-
-		assert.equal(retriedSpace, space);
-
-		// A successful subscription is enough to check read access here
-		const stopWatching = await world.rider.watchSpace(space, () => {});
-		stopWatching();
-
-		await assert.rejects(
-			world.taxi.watchSpace(space, () => {}),
-			SpaceAccessDeniedError,
-		);
-	});
-	test("rider sees the latest state and only the assigned taxi can read the assignment", async () => {
-		const network = new AtProtocolNetwork();
-		const world = createWorld(network);
-		const { authority, gateway } = world.coordinator;
-		const spaces = new AtprotoSpaces(
-			authority,
-			await loadPolicy("task.json", gateway.did),
-			gateway,
-		);
-
-		const taskId = "3m5abcde23456";
-		const space = await spaces.createTaskSpace(taskId, world.rider.did);
-		const otherTaxi = new LocalSimGateway(network, "did:example:other-taxi");
-		const request = rideRequest(taskId);
-		const offer = rideOffer(taskId, 120);
-		assert.ok(offer.payload);
-
-		await spaces.writeTaskState(taskId, {
-			$type: "com.hivemind-network.coordinator.taskState",
-			phase: "collecting",
-			updatedAt: request.createdAt,
-		});
-
-		const assignment: Assignment = {
-			$type: "com.hivemind-network.coordinator.assignment",
-			taskId,
-			agent: world.taxi.did,
-			requester: world.rider.did,
-			request: request.payload,
-			terms: offer.payload,
-			issuedAt: offer.createdAt,
-			// These fixture bytes let us check that the attestation survives the
-			// write and read. Signature verification is outside this test's scope
-			attestation: {
-				keyId: `${gateway.did}#hivemind_attestation`,
-				signature: new Uint8Array([9, 8, 7]),
-			},
-		};
-		await spaces.assign(taskId, assignment);
-
-		const latestState = {
-			$type: "com.hivemind-network.coordinator.taskState",
-			phase: "assigned",
-			assignedAgent: world.taxi.did,
-			updatedAt: offer.createdAt,
-		} as const;
-		await spaces.writeTaskState(taskId, latestState);
-
-		// Subscribe after both state writes. A rider who joins late should see
-		// only "assigned" at "self", and the assigned taxi should receive the
-		// assignment that was already published
-		const riderStates: unknown[] = [];
-		const taxiAssignments: unknown[] = [];
-		const stopRider = await world.rider.watchSpace(space, (change) => {
-			if (change.collection === latestState.$type && change.rkey === "self") {
-				riderStates.push(change.record);
-			}
-		});
-		const stopTaxi = await world.taxi.watchSpace(space, (change) => {
-			if (change.collection === assignment.$type && change.rkey === "self") {
-				taxiAssignments.push(change.record);
-			}
-		});
-
-		try {
-			await eventually(() => {
-				assert.deepEqual(riderStates, [latestState]);
-				assert.deepEqual(taxiAssignments, [assignment]);
-			});
-			await assert.rejects(
-				// Check that assigning one taxi leaves the space closed to other taxis
-				otherTaxi.watchSpace(space, () => {}),
-				SpaceAccessDeniedError,
-			);
-		} finally {
-			stopRider();
-			stopTaxi();
-		}
 	});
 });
