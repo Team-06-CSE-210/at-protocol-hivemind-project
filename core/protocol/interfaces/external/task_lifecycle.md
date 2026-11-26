@@ -42,7 +42,7 @@ A PDS grants access per space, not per collection. Readers therefore drop record
 
 - The coordinator ignores a `selection` from anyone but the task's requester, and `progress` from anyone but the assigned agent.
 - Agents and requesters ignore `taskState`, `assignment` and `dispatch` records not written by the coordinator.
-- The coordinator ignores offers after `respondBy` and offers with `decision: accept` but no payload.
+- The coordinator ignores offers at or after `respondBy` and offers with `decision: accept` but no payload.
 - A `requester.request` record is read once. Changing it later, even to a new task ID, does nothing; to change a request, the requester deletes it (which cancels the task) and writes a new one.
 - An `agent.offer` record belongs to the task it was first written for, as long as it is the agent's current offer for that task. Changing it to name another task does nothing. A new offer for the same task replaces the agent's earlier one; the earlier record is then no longer tied to the task, and changing it counts as a new offer.
 

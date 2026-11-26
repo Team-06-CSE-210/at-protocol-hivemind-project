@@ -32,6 +32,7 @@ no second collector in this service, and no Gateway implementation changes are n
 The coordinator retries failed offer storage and withdrawal operations up to
 `TasksConfig.maxOfferStoreAttempts`, using its existing retry delay settings. Retries go back
 through the record and task queues, recheck deadlines and eligibility, and skip changes that were
-superseded. A newer offer record from the same agent takes precedence over an older retry.
+superseded. An answer from the same agent for the same task that arrives later takes precedence
+over an earlier retry, whatever its record key.
 Shutdown cancels retry timers. Exhausted retries report errors; the retry queue is in memory and
 does not provide durable recovery across process restarts or permanent database outages.
