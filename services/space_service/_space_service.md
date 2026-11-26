@@ -29,10 +29,10 @@ function. `TaskRunner.start()` supplies the callback; its existing `handleOfferC
 offers, checks eligibility and deadlines, stores responses and withdraws deleted offers. There is
 no second collector in this service, and no Gateway implementation changes are needed.
 
-The coordinator retries failed offer storage and withdrawal operations up to
-`TasksConfig.maxOfferStoreAttempts`, using its existing retry delay settings. Retries go back
-through the record and task queues, recheck deadlines and eligibility, and skip changes that were
-superseded. An answer from the same agent for the same task that arrives later takes precedence
-over an earlier retry, whatever its record key.
-Shutdown cancels retry timers. Exhausted retries report errors; the retry queue is in memory and
-does not provide durable recovery across process restarts or permanent database outages.
+The coordinator retries failed offer storage and withdrawals with the delays of ADR-007 while the
+change can still matter (ADR-009): until its task stops collecting, and at most
+`TasksConfig.maxAnswerWindowMs` after the change arrived. Retries go back through the record and
+task queues, recheck deadlines and eligibility, and skip changes that were superseded. An answer
+from the same agent for the same task that arrives later takes precedence over an earlier retry,
+whatever its record key. Shutdown cancels retry timers. Every failed attempt is reported; the
+retry queue is in memory, and after a restart the watch replays the intake.

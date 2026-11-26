@@ -10,12 +10,10 @@ export interface TasksConfig {
 	readonly maxAnswerWindowMs: number;
 	// Time the requester has to pick an option in choose mode
 	readonly selectionWindowMs: number;
-	// Delay before writes that failed (space writes, billing) are tried again; it doubles with
-	// every failed attempt, up to maxRetryDelayMs
+	// Delay before writes that failed (space writes, billing, storing an offer change) are tried
+	// again; it doubles with every failed attempt, up to maxRetryDelayMs
 	readonly firstRetryDelayMs: number;
 	readonly maxRetryDelayMs: number;
-	// Bound attempts to store one offer inbox change; a later change supersedes the pending retry
-	readonly maxOfferStoreAttempts: number;
 }
 
 // Answer-window bounds as in the feed declaration lexicon (answerWindowMs: 50 to 600,000)
@@ -25,5 +23,4 @@ export const DEFAULT_TASKS_CONFIG: TasksConfig = {
 	selectionWindowMs: 60_000,
 	firstRetryDelayMs: 1_000,
 	maxRetryDelayMs: 60_000,
-	maxOfferStoreAttempts: 3,
 };

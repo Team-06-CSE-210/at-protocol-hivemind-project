@@ -361,7 +361,7 @@ for (const change of [
 	});
 }
 
-test("coordinator bounds storage retries and cancels their timers after exhaustion", async (t) => {
+test("coordinator retries a failed offer storage while its task collects, then stops", async (t) => {
 	const world = await collectingHarness(t);
 	const put = world.stores.tasks.put.bind(world.stores.tasks);
 	let attempts = 0;
@@ -373,15 +373,45 @@ test("coordinator bounds storage retries and cancels their timers after exhausti
 		await put(task);
 	};
 	await world.sendOffer();
-	for (const delay of [1_000, 2_000, 4_000]) {
-		world.clock.advanceBy(delay);
+	// Attempts at 0, 1, 3, 7 and 15 s fail. Collection ends at 30 s (the feed's answer window),
+	// so the attempt at 31 s finds the task no longer collecting, does nothing and ends the retries
+	await advanceSeconds(world, 120);
+	assert.equal(attempts, 5);
+	assert.equal(world.errors.length, attempts);
+	assert.equal(
+		(await world.stores.tasks.get(world.dispatch.taskId))?.state.phase,
+		"noOffers",
+	);
+	assert.equal(world.clock.pendingTimers, 0);
+});
+
+test("coordinator stops retrying an offer change after the longest answer window", async (t) => {
+	const world = await collectingHarness(t);
+	let attempts = 0;
+	world.stores.tasks.findByRecord = async () => {
+		attempts++;
+		throw new Error("database offline");
+	};
+	await world.sendOffer();
+	// Delays of 1 s doubling to 60 s: attempts at 0, 1, 3, 7, 15, 31, 63 s and then every minute
+	// up to 543 s. The next one (603 s) would come after maxAnswerWindowMs (600 s), when no task
+	// that was open when the change arrived can still be collecting
+	await advanceSeconds(world, 720);
+	assert.equal(attempts, 15);
+	assert.equal(world.errors.length, attempts);
+	assert.equal(world.clock.pendingTimers, 0);
+});
+
+// Advance one second at a time, so every retry runs before the next is due
+async function advanceSeconds(
+	world: Awaited<ReturnType<typeof collectingHarness>>,
+	seconds: number,
+): Promise<void> {
+	for (let second = 0; second < seconds; second++) {
+		world.clock.advanceBy(1_000);
 		await world.runner.settled();
 	}
-	assert.equal(attempts, DEFAULT_TASKS_CONFIG.maxOfferStoreAttempts);
-	assert.equal(world.errors.length, attempts);
-	// Only the task's collection deadline remains
-	assert.equal(world.clock.pendingTimers, 1);
-});
+}
 
 test("coordinator retries a failed offer withdrawal without restoring the offer", async (t) => {
 	const world = await collectingHarness(t);

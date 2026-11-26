@@ -191,3 +191,22 @@ Each task was ranked and assigned on its own, and nothing compared an agent's ta
 - Agents may still offer on several tasks. An agent that wins one should withdraw its other open offers (K5); until then the coordinator skips them.
 - In choose mode a requester can be assigned another agent than the one selected, when the selected one is busy.
 - Tasks one agent can serve together (a robot carrying several parcels) would need a capacity per task type or per agent profile.
+
+## ADR-009: An offer change is retried while it can still count
+
+Date: 2026-11-26. Status: proposed (PR #49).
+
+### Context
+
+Before PR #49, an offer the coordinator failed to store was reported and lost until the next restart replayed the offer intake. PR #49 added retries, limited to three attempts within about three seconds, so a short database outage still lost offers. A later answer from the same agent for the same task supersedes a pending retry, tracked by arrival order.
+
+### Decision
+
+- An offer change that fails to store is tried again with the delays of ADR-007 (1 s, doubling up to 1 min) while it can still count. Offers and withdrawals only count while their task collects, and a task that was open when the change arrived stops collecting within `maxAnswerWindowMs` (10 min).
+- So the retries end at the first attempt after the task stopped collecting, which then does nothing, and at the latest `maxAnswerWindowMs` after the change arrived. `TasksConfig.maxOfferStoreAttempts` is removed.
+- Retries stay in memory. After a restart the coordinator replays the offer intake.
+
+### Consequences
+
+- A database outage shorter than the answer window loses no offers.
+- An outage as long as the answer window reports one error per attempt, about fifteen per offer change.

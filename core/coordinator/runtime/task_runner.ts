@@ -94,6 +94,8 @@ interface PendingOfferChange extends PendingRetry {
 	change: RecordChange;
 	arrival: number;
 	answerKey?: string;
+	// When the change arrived, in ms; it can only matter for maxAnswerWindowMs after that
+	arrivedAt: number;
 }
 
 type StoredOffer = TaskRecord["offers"][number];
@@ -255,6 +257,7 @@ export class TaskRunner {
 			change: structuredClone(change),
 			failedAttempts: 0,
 			arrival: ++this.nextOfferArrival,
+			arrivedAt: this.dependencies.clock.now().getTime(),
 		};
 		if (change.action !== "delete") {
 			const parsed = hivemind.agent.offer.main.safeParse(change.record);
@@ -291,21 +294,22 @@ export class TaskRunner {
 					return;
 				}
 				pending.failedAttempts++;
-				if (pending.failedAttempts >= this.config.maxOfferStoreAttempts) {
+				// Try again with the delays of ADR-007 while the change can still matter (ADR-009).
+				// Offers and withdrawals only count while their task collects, and a task opened
+				// before the change arrived stops collecting within maxAnswerWindowMs of it; once
+				// the task has stopped collecting, the next attempt does nothing and ends the retries
+				const { clock } = this.dependencies;
+				const retryAt =
+					clock.now().getTime() +
+					retryDelayMs(pending.failedAttempts, this.config);
+				if (retryAt >= pending.arrivedAt + this.config.maxAnswerWindowMs) {
 					this.offerChanges.delete(key);
 					return;
 				}
-				const { clock } = this.dependencies;
-				pending.cancel = clock.setTimer(
-					new Date(
-						clock.now().getTime() +
-							retryDelayMs(pending.failedAttempts, this.config),
-					),
-					() => {
-						pending.cancel = undefined;
-						void this.processOfferChange(key, pending);
-					},
-				);
+				pending.cancel = clock.setTimer(new Date(retryAt), () => {
+					pending.cancel = undefined;
+					void this.processOfferChange(key, pending);
+				});
 			}
 		});
 	}

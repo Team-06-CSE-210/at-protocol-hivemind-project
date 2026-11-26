@@ -62,3 +62,4 @@ The coordinator stores every phase change before it writes it into the spaces. I
 - Participants may see a phase late, but never one the coordinator has not decided.
 - Deadlines (`respondBy`, `selectBy`) run on the stored phase, not on what a space shows. A choose-mode requester whose options appear late has correspondingly less time to select.
 - Each assignment is billed once, however often its writes are repeated.
+- An offer the coordinator fails to store is tried again with the same delays while it can still count: until its task stops collecting, and at most ten minutes (the longest answer window) after it arrived.
