@@ -6,7 +6,10 @@ import type {
 	AtprotoGateway,
 	RecordChange,
 } from "../core/protocol/interfaces/internal/atproto_gateway.js";
-import type { AgentBehavior } from "../core/protocol/interfaces/internal/client_lib.js";
+import type {
+	AgentBehavior,
+	AgentClientOptions,
+} from "../core/protocol/interfaces/internal/client_lib.js";
 import type {
 	AgentOffer,
 	AtUri,
@@ -391,5 +394,25 @@ export class AgentOfferRouter {
 	// Refuse writes at or after respondBy, including after a slow decision or retry wait
 	private isOpen(dispatch: Dispatch): boolean {
 		return this.now().getTime() < Date.parse(dispatch.respondBy);
+	}
+}
+
+export class HivemindAgent {
+	constructor(private readonly options: AgentClientOptions) {}
+
+	async start(): Promise<void> {
+		const { gateway, profile } = this.options;
+		const collection = hivemind.agent.profile.$nsid;
+		const record = hivemind.agent.profile.main.parse({
+			...profile,
+			$type: collection,
+			createdAt: l.toDatetimeString(new Date()),
+		});
+
+		await gateway.putRecord(
+			collection,
+			"self",
+			l.asUnknown$TypedObject(record),
+		);
 	}
 }
