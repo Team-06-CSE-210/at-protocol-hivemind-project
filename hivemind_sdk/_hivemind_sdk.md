@@ -23,6 +23,11 @@ lexicons, and asks the behavior once per task. Duplicate feed deliveries share t
 A deadline update is applied even while the behavior is deciding. Deletion, expiry or `stop()`
 prevents a pending answer from being written. Assignment verification and `onLost` belong to K5.
 
+An agent holds at most one active task (ADR-008): the coordinator skips the offers of an agent that
+is assigned to another task. The router still answers every dispatch, so an agent may have open
+offers on several tasks. Once K5 sees that the agent won a task, it should withdraw the agent's
+other open offers with `withdraw(taskId)`, so those tasks can close early.
+
 Accepts need a payload that the task type's module accepts for the dispatch (`moduleForPayload`,
 then `parseOffer` against the dispatch's payload; coarsening keeps what that check reads). The
 coordinator would drop a refused accept without telling the agent, so the router reports it

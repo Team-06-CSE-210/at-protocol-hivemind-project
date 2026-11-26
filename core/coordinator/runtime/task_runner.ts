@@ -117,6 +117,9 @@ export class TaskRunner {
 	// Arrival order is independent of whether an answer reached storage successfully
 	private readonly latestOfferArrival = new Map<string, number>();
 	private nextOfferArrival = 0;
+	// The task each agent is assigned to, until that task ends: an agent holds at most one active
+	// task (ADR-008). Rebuilt from the stored tasks at start
+	private readonly activeTaskOfAgent = new Map<Did, TaskId>();
 	// Queues by task ID, and by "author collection rkey" for intake records
 	private readonly queues = new Map<string, Promise<void>>();
 	private readonly stopIntakes: Array<() => void> = [];
@@ -138,8 +141,16 @@ export class TaskRunner {
 		const { stores, spaces } = this.dependencies;
 
 		// 1. Resume tasks with work left first, so intake records already handled find their task.
+		//    Agents that hold an assigned task count as occupied before anything is assigned.
 		//    A task that fails to resume is tried again on its own; the others go on
-		for (const task of await stores.tasks.listOpen()) {
+		const openTasks = await stores.tasks.listOpen();
+		for (const task of openTasks) {
+			const { phase, assignedAgent } = task.state;
+			if (phase === "assigned" && assignedAgent !== undefined) {
+				this.activeTaskOfAgent.set(assignedAgent, task.taskId);
+			}
+		}
+		for (const task of openTasks) {
 			await this.enqueue(task.taskId, () => this.resume(task.taskId));
 		}
 
@@ -180,6 +191,8 @@ export class TaskRunner {
 		}
 		this.offerChanges.clear();
 		this.latestOfferArrival.clear();
+		// start() rebuilds them from the stored tasks
+		this.activeTaskOfAgent.clear();
 		await Promise.allSettled([...this.queues.values()]);
 	}
 
@@ -567,25 +580,23 @@ export class TaskRunner {
 			return;
 		}
 
-		// 3. Auto mode: the best option wins
+		// 3. Auto mode: the best option from an agent that is still free wins
 		const offerByOption = new Map(
 			accepted.map((stored, index) => [optionIdFor(index), stored]),
 		);
 		if (phase === "assigned") {
-			const winner = offerByOption.get(ranked[0].optionId);
-			if (winner === undefined) {
-				await this.finish(task, "noOffers");
-				return;
-			}
-			await this.assign(task, winner);
+			await this.assign(
+				task,
+				ranked.flatMap(({ optionId }) => offerByOption.get(optionId) ?? []),
+			);
 			return;
 		}
 
-		// 4. Choose mode: the requester picks before selectBy
+		// 4. Choose mode: the requester picks before selectBy, among agents that are still free
 		const options: OfferOption[] = [];
 		for (const { optionId, score } of ranked) {
 			const stored = offerByOption.get(optionId);
-			if (stored === undefined) {
+			if (stored === undefined || this.isOccupied(stored.agent, taskId)) {
 				continue;
 			}
 			options.push({
@@ -595,6 +606,10 @@ export class TaskRunner {
 				headline: module.headline(parsedOfferByOption.get(optionId)),
 				terms: offerPayload(stored),
 			});
+		}
+		if (options.length === 0) {
+			await this.finish(task, "noOffers");
+			return;
 		}
 		task.state = {
 			...taskState("awaitingSelection", now),
@@ -608,8 +623,21 @@ export class TaskRunner {
 	// Assignment and end phases
 	// * * * * * * * * * * * * * * * * * *
 
-	private async assign(task: TaskRecord, winner: StoredOffer): Promise<void> {
-		const { signer, clock } = this.dependencies;
+	// Assign the first candidate whose agent is still free; with none free the task ends in noOffers.
+	// The check and the reservation run without an await in between, so two tasks that close at the
+	// same moment cannot both take one agent (ADR-008)
+	private async assign(
+		task: TaskRecord,
+		candidates: StoredOffer[],
+	): Promise<void> {
+		const { signer, clock, stores } = this.dependencies;
+		const winner = candidates.find(({ agent }) =>
+			this.reserveAgent(agent, task.taskId),
+		);
+		if (winner === undefined) {
+			await this.finish(task, "noOffers");
+			return;
+		}
 		const now = clock.now();
 
 		// 1. The signed assignment carries the exact request and the winner's terms
@@ -631,7 +659,42 @@ export class TaskRunner {
 		//    The task space watch then waits for its progress
 		task.assignment = assignment;
 		task.state = { ...taskState("assigned", now), assignedAgent: winner.agent };
-		await this.commit(task);
+		try {
+			await this.commit(task);
+		} catch (error) {
+			// Free the agent again only if the assignment is known not to be stored. If that cannot
+			// be read either, it stays reserved until the next start rebuilds the reservations
+			let stored: TaskRecord | undefined;
+			try {
+				stored = await stores.tasks.get(task.taskId);
+			} catch {
+				throw error;
+			}
+			if (stored?.state.assignedAgent !== winner.agent) {
+				this.freeAgent(winner.agent, task.taskId);
+			}
+			throw error;
+		}
+	}
+
+	// An agent is occupied while another task it is assigned to has not ended
+	private isOccupied(agent: Did, taskId: TaskId): boolean {
+		const activeTask = this.activeTaskOfAgent.get(agent);
+		return activeTask !== undefined && activeTask !== taskId;
+	}
+
+	private reserveAgent(agent: Did, taskId: TaskId): boolean {
+		if (this.isOccupied(agent, taskId)) {
+			return false;
+		}
+		this.activeTaskOfAgent.set(agent, taskId);
+		return true;
+	}
+
+	private freeAgent(agent: Did | undefined, taskId: TaskId): void {
+		if (agent !== undefined && this.activeTaskOfAgent.get(agent) === taskId) {
+			this.activeTaskOfAgent.delete(agent);
+		}
 	}
 
 	private async finish(task: TaskRecord, phase: TaskPhase): Promise<void> {
@@ -691,13 +754,26 @@ export class TaskRunner {
 			if (!parsed.success || deadlinePassed) {
 				return;
 			}
-			const option = task.state.options?.find(
+			const options = task.state.options ?? [];
+			const chosen = options.find(
 				({ optionId }) => optionId === parsed.value.optionId,
 			);
-			const winner = task.offers.find(({ agent }) => agent === option?.agent);
-			if (winner !== undefined) {
-				await this.assign(task, winner);
+			if (chosen === undefined) {
+				return;
 			}
+			// If the chosen agent took another task meanwhile, the next free option in ranked
+			// order is assigned instead
+			const ordered = [
+				chosen,
+				...options.filter((option) => option !== chosen),
+			];
+			await this.assign(
+				task,
+				ordered.flatMap(
+					(option) =>
+						task.offers.find(({ agent }) => agent === option.agent) ?? [],
+				),
+			);
 			return;
 		}
 
@@ -752,6 +828,7 @@ export class TaskRunner {
 		await this.dependencies.stores.tasks.put(task);
 		if (isEndPhase(task.state.phase)) {
 			this.release(task.taskId);
+			this.freeAgent(task.state.assignedAgent, task.taskId);
 		} else {
 			this.armTimer(task);
 		}
