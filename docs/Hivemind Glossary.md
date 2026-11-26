@@ -18,6 +18,8 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **AccountSession** (hivemind notation): Client class in `packages/atproto-client/src/account-session.ts`. Logs an account into its PDS and makes every authenticated call for it: records, service auth tokens, space writes and space credentials.
 
+**Active task** (hivemind notation): A task in phase `assigned`, from its assignment until it reaches an end phase. An agent holds at most one; the coordinator checks this right before it assigns (ADR-008).
+
 **Agent** (hivemind notation): An autonomous system with its own DID that receives dispatches and answers with offers, such as a robotaxi, warehouse robot or EV charger. Not the same as an atproto client "agent": in Bluesky's TypeScript libraries, `Agent` / `AtpAgent` is just an API client object.
 
 **Agent kind** (hivemind notation): The `agentKind` field of an agent profile: `vehicle`, `mobileRobot`, `manipulator`, `chargingStation` or `other`.
@@ -226,7 +228,7 @@ Where Hivemind reuses a word that atproto already uses differently (agent, feed,
 
 **noCoverage** (hivemind notation): Task phase when no feed's coverage and task types match the request, so nothing is dispatched.
 
-**noOffers** (hivemind notation): Task phase and closed reason when the answer window ends without a single acceptable offer.
+**noOffers** (hivemind notation): Task phase and closed reason when the answer window ends without a single acceptable offer, or when every agent that accepted holds another active task when the coordinator assigns.
 
 **Notification receiver** (hivemind notation): `SpaceNotificationReceiver` in `packages/atproto-client`: the endpoint that takes incoming `notifyWrite` calls and passes each one to the SpaceSyncer of that space.
 

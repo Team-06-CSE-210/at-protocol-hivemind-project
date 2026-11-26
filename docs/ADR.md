@@ -168,3 +168,45 @@ The task runner stored each step and then wrote to the spaces, but a failed spac
 - Whoever implements `services/space_service/` must make every write repeatable, including closing a dispatch that is already closed.
 - A space host that stays unreachable gets a retry every minute per affected task until it is back.
 - Old SQLite files still open: their tasks count as published, and the earlier `billing_usage` table is no longer used, so its counts do not carry over. Nothing had been released.
+
+## ADR-008: An agent holds at most one active task
+
+Date: 2026-11-26. Status: proposed (PR #49).
+
+### Context
+
+Each task was ranked and assigned on its own, and nothing compared an agent's tasks with each other. Two requests in one region that close at about the same time usually rank the same nearest taxi first, so both were assigned to it; choose mode had the same gap when both requesters picked it. The taxi then held two signed assignments. It could serve the second ride late, with a pickup time that no longer held, or report it as failed, which ended that task without trying the next-best offer.
+
+### Decision
+
+- An agent holds at most one active task: from its assignment until the task reaches an end phase.
+- The coordinator checks this as the last step before assigning and reserves the agent in the same step. The check and the reservation run without an `await` in between, so two tasks that close at the same moment cannot both take one agent.
+- Auto mode assigns the best offer from a free agent. Choose mode leaves busy agents out of the options; if the selected agent took another task since, the next free option in ranked order is assigned. With no free agent, the task ends in `noOffers`.
+- The reservations are kept in the coordinator's memory and rebuilt at start from the stored tasks in phase `assigned`, before any task resumes. If storing an assignment fails, the agent is freed once the stored task shows it unassigned; if that cannot be read either, it stays reserved until the next start.
+
+### Consequences
+
+- The first task to close gets the agent. The coordinator does not look for the best pairing of several tasks at once.
+- The check assumes one coordinator process per coordinator DID. Several processes would need it in the database (at most one assigned task per agent).
+- Agents may still offer on several tasks. An agent that wins one should withdraw its other open offers (K5); until then the coordinator skips them.
+- In choose mode a requester can be assigned another agent than the one selected, when the selected one is busy.
+- Tasks one agent can serve together (a robot carrying several parcels) would need a capacity per task type or per agent profile.
+
+## ADR-009: An offer change is retried while it can still count
+
+Date: 2026-11-26. Status: proposed (PR #49).
+
+### Context
+
+Before PR #49, an offer the coordinator failed to store was reported and lost until the next restart replayed the offer intake. PR #49 added retries, limited to three attempts within about three seconds, so a short database outage still lost offers. A later answer from the same agent for the same task supersedes a pending retry, tracked by arrival order.
+
+### Decision
+
+- An offer change that fails to store is tried again with the delays of ADR-007 (1 s, doubling up to 1 min) while it can still count. Offers and withdrawals only count while their task collects, and a task that was open when the change arrived stops collecting within `maxAnswerWindowMs` (10 min).
+- So the retries end at the first attempt after the task stopped collecting, which then does nothing, and at the latest `maxAnswerWindowMs` after the change arrived. `TasksConfig.maxOfferStoreAttempts` is removed.
+- Retries stay in memory. After a restart the coordinator replays the offer intake.
+
+### Consequences
+
+- A database outage shorter than the answer window loses no offers.
+- An outage as long as the answer window reports one error per attempt, about fifteen per offer change.

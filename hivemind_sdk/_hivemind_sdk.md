@@ -6,7 +6,56 @@ The main interface for building and simulating applications with the Hivemind pr
 | --- | --- | --- |
 | `hivemind_requester.ts` | `submitRequest(dependencies, payload, options)`: checks a request against the lexicon and its task type's module, writes it into the coordinator's request intake through the requester's own PDS, and returns the task ID and the record key. `RequesterClient` (register, request, task handle) builds on it. | `submitRequest` done; the rest is K3 (#22) and K6 (#40) |
 | `hivemind_organization.ts` | `OrganizationClient`: register as operator, enroll agents, declare feeds, manage private allowlists | empty: K1 (#37), K2 (#38) |
-| `hivemind_agent.ts` | `AgentClient`: publishes the agent's profile, answers dispatches through its `AgentBehavior`, carries out assignments | empty: K1 (#37), K4 (#26), K5 (#39) |
+| `hivemind_agent.ts` | `AgentOfferRouter`: follows the feeds listed in an agent's profile, asks `AgentBehavior.onDispatch`, writes offers and declines, and withdraws offers | offer routing implemented: K4 (#26); onboarding K1 (#37) and assignment handling K5 (#39) remain separate |
+| `offer_routing_config.ts` | `OfferRoutingConfig`, `DEFAULT_OFFER_ROUTING_CONFIG`: bounded write retry count and delay | used by `AgentOfferRouter` |
+
+## Offer routing
+
+`Feed space -> AgentOfferRouter -> offer intake -> AtprotoSpaces.watchOfferIntake -> TaskRunner.handleOfferChange`
+
+Create `AgentOfferRouter` with the agent's Gateway, coordinator DID, profile's feed declaration URIs,
+behavior and an `onError` callback, then call `start()`. The caller must first register the agent and
+its operator, publish the profile, and arrange access to the feed spaces. Those onboarding operations
+belong to K1. The router derives addresses with `feedSpaceRef` and `offerIntakeSpaceRef`.
+
+The router accepts only coordinator-authored dispatches, validates their envelopes with generated
+lexicons, and asks the behavior once per task. Duplicate feed deliveries share the same decision.
+A deadline update is applied even while the behavior is deciding. Deletion, expiry or `stop()`
+prevents a pending answer from being written. Assignment verification and `onLost` belong to K5.
+
+An agent holds at most one active task (ADR-008): the coordinator skips the offers of an agent that
+is assigned to another task. The router still answers every dispatch, so an agent may have open
+offers on several tasks. Once K5 sees that the agent won a task, it should withdraw the agent's
+other open offers with `withdraw(taskId)`, so those tasks can close early.
+
+Once every dispatch of a task is deleted and no decision or write is running, the router forgets
+the task, so a long-running agent keeps state only for open dispatches (`trackedTasks` counts
+them). A deleted dispatch does not come back, and a withdrawal after collection changes nothing.
+K5's check whether the agent won belongs at the same point.
+
+Accepts need a payload that the task type's module accepts for the dispatch (`moduleForPayload`,
+then `parseOffer` against the dispatch's payload; coarsening keeps what that check reads). The
+coordinator would drop a refused accept without telling the agent, so the router reports it
+through `onError` and writes nothing. Declines may carry a reason.
+
+A failed key generation or write is retried up to `maxWriteAttempts`, reusing the validated offer
+and any key already generated. Each retry rechecks closure and the latest deadline. After exhaustion
+the router reports `onError`; a later dispatch delivery can retry the retained offer. This retry
+state lasts for the router instance, not across process restarts. After a restart, a dispatch that
+is still open is answered again under a new key; the coordinator takes that as a new offer from the
+agent, which replaces its earlier one. `withdraw(taskId)` closes a pending decision immediately,
+waits for any offer write already in flight, and deletes the agent's own record with bounded
+retries. Concurrent restarts wait for shutdown to finish; partial startup releases earlier
+subscriptions. The behavior receives a copy of the dispatch so it cannot change routing identity or
+deadlines.
+
+`onSent` means the Gateway write completed, not that the coordinator accepted the offer. A PDS can
+accept a write that stays invisible because the agent lacks space access (see `_communication.md`).
+The coordinator separately checks eligibility, the task phase and deadline, and task-specific terms.
+
+`tests/hivemind_sdk/hivemind_agent.test.ts` exercises the router on `LocalSimGateway`.
+`tests/coordinator/runtime/offer_routing.test.ts` connects it to the existing coordinator collector;
+request routing and ranking use existing test fixtures because those are separate work packages.
 
 ## Rules
 
